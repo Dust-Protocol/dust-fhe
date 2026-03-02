@@ -6,6 +6,9 @@ const SUBGRAPH_URLS: Record<number, string | undefined> = {
   111551119090: process.env.NEXT_PUBLIC_SUBGRAPH_URL_THANOS || undefined,
   11155111: process.env.NEXT_PUBLIC_SUBGRAPH_URL_SEPOLIA
     || 'https://api.studio.thegraph.com/query/1741961/dust-protocol-sepolia/v0.0.2',
+  421614: process.env.NEXT_PUBLIC_SUBGRAPH_URL_ARBITRUM_SEPOLIA || undefined,
+  11155420: process.env.NEXT_PUBLIC_SUBGRAPH_URL_OP_SEPOLIA || undefined,
+  84532: process.env.NEXT_PUBLIC_SUBGRAPH_URL_BASE_SEPOLIA || undefined,
 };
 
 const REQUEST_TIMEOUT_MS = 10_000;

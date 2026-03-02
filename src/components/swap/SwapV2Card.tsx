@@ -511,7 +511,7 @@ export function SwapV2Card({ onPoolChange, oraclePrice }: { onPoolChange?: () =>
                     CHAIN_UNSUPPORTED
                   </span>
                   <span className="text-[11px] text-[rgba(255,255,255,0.4)] font-mono leading-relaxed">
-                    V2 Swap is deployed on Ethereum Sepolia only.
+                    V2 Swap is not deployed on this chain.
                   </span>
                 </div>
               </div>
@@ -519,7 +519,7 @@ export function SwapV2Card({ onPoolChange, oraclePrice }: { onPoolChange?: () =>
                 onClick={() => switchChain?.({ chainId: DEFAULT_CHAIN_ID })}
                 className="w-full py-2 rounded-sm text-xs font-bold font-mono text-[#FFB000] bg-[rgba(255,176,0,0.08)] border border-[rgba(255,176,0,0.25)] hover:bg-[rgba(255,176,0,0.14)] hover:border-[#FFB000] transition-all tracking-wider"
               >
-                SWITCH TO ETHEREUM SEPOLIA
+                SWITCH TO SUPPORTED CHAIN
               </button>
             </div>
           )}

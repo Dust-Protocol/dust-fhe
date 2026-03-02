@@ -9,7 +9,7 @@ import { useV2Compliance } from "@/hooks/dustpool/v2/useV2Compliance";
 import { useChainlinkPrice } from "@/hooks/swap/useChainlinkPrice";
 import { COMPLIANCE_COOLDOWN_THRESHOLD_USD } from "@/lib/dustpool/v2/constants";
 import { computeAssetId } from "@/lib/dustpool/v2/commitment";
-import { getChainConfig } from "@/config/chains";
+import { getChainConfig, DEFAULT_CHAIN_ID } from "@/config/chains";
 import {
   ShieldCheckIcon,
   AlertCircleIcon,
@@ -73,7 +73,7 @@ export function V2WithdrawModal({
 
   useEffect(() => {
     let cancelled = false;
-    const resolvedChainId = chainId ?? 11155111;
+    const resolvedChainId = chainId ?? DEFAULT_CHAIN_ID;
     const promises: [Promise<bigint>, Promise<bigint> | null] = [
       computeAssetId(resolvedChainId, zeroAddress),
       usdcTokenAddress ? computeAssetId(resolvedChainId, usdcTokenAddress) : null,

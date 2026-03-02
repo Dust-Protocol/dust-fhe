@@ -9,6 +9,7 @@ import {
   computePoolId,
 } from '@/lib/swap/contracts'
 import { getChainConfig } from '@/config/chains'
+import { getUSDCAddress } from '@/lib/swap/constants'
 import { DUST_POOL_V2_ABI, getDustPoolV2Address } from '@/lib/dustpool/v2/contracts'
 
 const Q96 = BigInt(2) ** BigInt(96)
@@ -106,11 +107,6 @@ function estimateReserves(
   return { ethReserve, usdcReserve }
 }
 
-// USDC addresses per chain (Sepolia only for now)
-const USDC_ADDRESSES: Record<number, Address> = {
-  11155111: '0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238',
-}
-
 async function fetchPrivacyPoolStats(
   client: ReturnType<typeof usePublicClient>,
   poolAddress: Address,
@@ -118,7 +114,8 @@ async function fetchPrivacyPoolStats(
 ): Promise<{ ethWei: bigint; usdcUnits: bigint; noteCount: number }> {
   if (!client) return { ethWei: 0n, usdcUnits: 0n, noteCount: 0 }
 
-  const usdcAddr = USDC_ADDRESSES[chainId]
+  let usdcAddr: Address | undefined
+  try { usdcAddr = getUSDCAddress(chainId) } catch { /* USDC not configured */ }
   const calls = [
     client.readContract({
       address: poolAddress,
