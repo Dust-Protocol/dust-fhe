@@ -277,20 +277,20 @@ export async function scanAnnouncementsViewOnly(
 
 import { storageKey, migrateKey } from '@/lib/storageKey';
 
-function lastScannedKey(address: string): string {
-  return storageKey('scanner', address);
+function lastScannedKey(address: string, chainId?: number): string {
+  return storageKey('scanner', address, chainId);
 }
 
-export function getLastScannedBlock(address: string): number | null {
+export function getLastScannedBlock(address: string, chainId?: number): number | null {
   if (typeof window === 'undefined') return null;
-  migrateKey('stealth_last_scanned_' + address.toLowerCase(), lastScannedKey(address));
-  const val = localStorage.getItem(lastScannedKey(address));
+  migrateKey('stealth_last_scanned_' + address.toLowerCase(), lastScannedKey(address, chainId));
+  const val = localStorage.getItem(lastScannedKey(address, chainId));
   return val ? parseInt(val, 10) : null;
 }
 
-export function setLastScannedBlock(address: string, block: number): void {
+export function setLastScannedBlock(address: string, block: number, chainId?: number): void {
   if (typeof window !== 'undefined') {
-    localStorage.setItem(lastScannedKey(address), block.toString());
+    localStorage.setItem(lastScannedKey(address, chainId), block.toString());
   }
 }
 

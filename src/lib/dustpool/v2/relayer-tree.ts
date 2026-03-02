@@ -17,6 +17,10 @@ import { toBytes32Hex } from '../poseidon'
 const V2_START_BLOCKS: Record<number, number> = {
   11155111: 10311323,
   111551119090: 6482414,
+  // L2 testnets — set to 0 until contracts are deployed (will be updated with actual deployment blocks)
+  421614: 0,
+  11155420: 0,
+  84532: 0,
 }
 
 // drpc.org enforces 10K block limit on eth_getLogs

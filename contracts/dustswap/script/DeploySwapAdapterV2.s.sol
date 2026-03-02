@@ -18,60 +18,35 @@ interface IAggregatorV3Check {
     function description() external view returns (string memory);
 }
 
-/// @title DeploySwapAdapterV2 — Production deployment for DustSwapAdapterV2
+/// @title DeploySwapAdapterV2 — Multi-chain deployment for DustSwapAdapterV2
 ///
-/// @notice Deployment pipeline:
+/// @notice All chain-specific addresses are read from environment variables.
+///
+/// Required env vars:
+///   PRIVATE_KEY          — deployer private key
+///   POOL_MANAGER         — Uniswap V4 PoolManager address for target chain
+///   DUST_POOL_V2         — DustPoolV2 address for target chain
+///   CHAINLINK_ETH_USD    — Chainlink ETH/USD price feed for target chain
+///
+/// Deployment pipeline:
 ///
 ///   STEP 1 — Deploy PoseidonT6 library (skip if already deployed):
-///     cd contracts/dustswap && forge script script/DeploySwapAdapterV2.s.sol \
+///     forge script script/DeploySwapAdapterV2.s.sol \
 ///       --sig "deployPoseidon()" \
-///       --rpc-url $SEPOLIA_RPC_URL \
-///       --private-key $PRIVATE_KEY \
-///       --broadcast --slow
-///     → Copy logged PoseidonT6 address into foundry.toml libraries[]
+///       --rpc-url $RPC_URL --private-key $PRIVATE_KEY --broadcast --slow
 ///
-///   STEP 2 — Simulate (dry run, no broadcast):
+///   STEP 2 — Simulate (dry run):
 ///     forge script script/DeploySwapAdapterV2.s.sol \
-///       --rpc-url $SEPOLIA_RPC_URL \
-///       --private-key $PRIVATE_KEY
+///       --rpc-url $RPC_URL --private-key $PRIVATE_KEY
 ///
-///   STEP 3 — Deploy + configure (broadcast):
+///   STEP 3 — Deploy + configure:
 ///     forge script script/DeploySwapAdapterV2.s.sol \
-///       --rpc-url $SEPOLIA_RPC_URL \
-///       --private-key $PRIVATE_KEY \
-///       --broadcast --slow --verify
+///       --rpc-url $RPC_URL --private-key $PRIVATE_KEY --broadcast --slow --verify
 ///
-///   STEP 4 — Verify (if --verify failed or skipped):
-///     forge verify-contract <ADAPTER_ADDRESS> DustSwapAdapterV2 \
-///       --chain 11155111 \
-///       --etherscan-api-key $ETHERSCAN_API_KEY \
-///       --constructor-args $(cast abi-encode "constructor(address,address)" \
-///         0x93805603e0167574dFe2F50ABdA8f42C85002FD8 \
-///         0x3cbf3459e7E0E9Fd2fd86a28c426CED2a60f023f)
-///
-///   STEP 5 — Post-deploy checks:
+///   STEP 4 — Post-deploy verification:
 ///     forge script script/DeploySwapAdapterV2.s.sol \
-///       --sig "verify(address)" <ADAPTER_ADDRESS> \
-///       --rpc-url $SEPOLIA_RPC_URL
-///
-/// @dev Thanos Sepolia: No Uniswap V4 PoolManager — DustSwapAdapterV2 is Ethereum Sepolia only.
+///       --sig "verify(address)" <ADAPTER_ADDRESS> --rpc-url $RPC_URL
 contract DeploySwapAdapterV2 is Script {
-    // ─── Ethereum Sepolia Constants ─────────────────────────────────────────────
-
-    /// @dev Uniswap V4 PoolManager (Ethereum Sepolia, canonical)
-    address constant POOL_MANAGER = 0x93805603e0167574dFe2F50ABdA8f42C85002FD8;
-
-    /// @dev DustPoolV2 privacy pool (Ethereum Sepolia, current deployment)
-    address constant DUST_POOL_V2 = 0x3cbf3459e7E0E9Fd2fd86a28c426CED2a60f023f;
-
-    /// @dev PoseidonT3 library (deployed, linked in foundry.toml)
-    address constant POSEIDON_T3 = 0x203a488C06e9add25D4b51F7EDE8e56bCC4B1A1C;
-
-    /// @dev Chainlink ETH/USD price feed (Ethereum Sepolia)
-    address constant CHAINLINK_ETH_USD = 0x694AA1769357215DE4FAC081bf1f309aDC325306;
-
-    /// @dev Deployer / relayer address
-    address constant DEPLOYER = 0x8d56E94a02F06320BDc68FAfE23DEc9Ad7463496;
 
     // ─── Step 1: Deploy PoseidonT6 Library ──────────────────────────────────────
 
@@ -104,12 +79,14 @@ contract DeploySwapAdapterV2 is Script {
     // ─── Step 2+3: Full Deployment ──────────────────────────────────────────────
 
     /// @notice Deploy DustSwapAdapterV2 + configure oracle + authorize relayer on pool.
-    ///         Run without --broadcast first to simulate, then with --broadcast --slow.
     function run() external {
         uint256 deployerKey = vm.envUint("PRIVATE_KEY");
         address deployer = vm.addr(deployerKey);
 
-        // ── Pre-flight checks ───────────────────────────────────────────────
+        address poolManager = vm.envAddress("POOL_MANAGER");
+        address dustPoolV2 = vm.envAddress("DUST_POOL_V2");
+        address chainlinkFeed = vm.envAddress("CHAINLINK_ETH_USD");
+
         console.log("========================================");
         console.log("  DustSwapAdapterV2 Production Deploy");
         console.log("========================================");
@@ -118,21 +95,17 @@ contract DeploySwapAdapterV2 is Script {
         console.log("Chain ID:     ", block.chainid);
         console.log("Deployer:     ", deployer);
         console.log("Balance:      ", deployer.balance);
-        console.log("PoolManager:  ", POOL_MANAGER);
-        console.log("DustPoolV2:   ", DUST_POOL_V2);
-        console.log("Chainlink:    ", CHAINLINK_ETH_USD);
+        console.log("PoolManager:  ", poolManager);
+        console.log("DustPoolV2:   ", dustPoolV2);
+        console.log("Chainlink:    ", chainlinkFeed);
 
-        require(deployer == DEPLOYER, "Wrong deployer key");
         require(deployer.balance > 0.01 ether, "Insufficient deployer balance");
-        require(block.chainid == 11155111, "Not Ethereum Sepolia");
 
-        // Validate DustPoolV2 is live and deployer is owner
-        IDustPoolV2Admin pool = IDustPoolV2Admin(DUST_POOL_V2);
+        IDustPoolV2Admin pool = IDustPoolV2Admin(dustPoolV2);
         require(pool.owner() == deployer, "Deployer is not DustPoolV2 owner");
         require(!pool.paused(), "DustPoolV2 is paused");
 
-        // Validate Chainlink feed is responding
-        IAggregatorV3Check oracle = IAggregatorV3Check(CHAINLINK_ETH_USD);
+        IAggregatorV3Check oracle = IAggregatorV3Check(chainlinkFeed);
         (, int256 price,,uint256 updatedAt,) = oracle.latestRoundData();
         require(price > 0, "Chainlink returning zero price");
         require(block.timestamp - updatedAt < 3600, "Chainlink feed stale");
@@ -141,32 +114,25 @@ contract DeploySwapAdapterV2 is Script {
         console.log("Feed decimals:     ", oracle.decimals());
         console.log("");
 
-        // ── Deploy ──────────────────────────────────────────────────────────
         vm.startBroadcast(deployerKey);
 
-        // 1. Deploy adapter
         DustSwapAdapterV2 adapter = new DustSwapAdapterV2(
-            POOL_MANAGER,
-            DUST_POOL_V2
+            poolManager,
+            dustPoolV2
         );
         console.log("[1/4] DustSwapAdapterV2 deployed:", address(adapter));
 
-        // 2. Authorize deployer as relayer on the adapter
         adapter.setRelayer(deployer, true);
         console.log("[2/4] Relayer authorized on adapter:", deployer);
 
-        // 3. Configure Chainlink oracle on the adapter (10% max deviation default)
-        adapter.setPriceOracle(CHAINLINK_ETH_USD);
-        console.log("[3/4] Chainlink oracle configured:", CHAINLINK_ETH_USD);
+        adapter.setPriceOracle(chainlinkFeed);
+        console.log("[3/4] Chainlink oracle configured:", chainlinkFeed);
 
-        // 4. Authorize adapter as relayer on DustPoolV2
-        //    (adapter calls pool.deposit() during swap, needs relayer auth)
         pool.setRelayer(address(adapter), true);
         console.log("[4/4] Adapter authorized on DustPoolV2:", address(adapter));
 
         vm.stopBroadcast();
 
-        // ── Post-deploy summary ─────────────────────────────────────────────
         console.log("");
         console.log("========================================");
         console.log("  Deployment Complete");
@@ -182,22 +148,28 @@ contract DeploySwapAdapterV2 is Script {
         console.log("=== REQUIRED UPDATES ===");
         console.log("1. src/config/chains.ts  -> dustSwapAdapterV2:", address(adapter));
         console.log("2. docs/CONTRACTS.md     -> DustSwapAdapterV2 section");
-        console.log("3. Verify on Etherscan:");
+        console.log("3. Verify on explorer:");
         console.log(
             string(abi.encodePacked(
                 "   forge verify-contract ",
                 vm.toString(address(adapter)),
-                " DustSwapAdapterV2 --chain 11155111 --etherscan-api-key $ETHERSCAN_API_KEY"
+                " DustSwapAdapterV2 --chain ",
+                vm.toString(block.chainid),
+                " --etherscan-api-key $ETHERSCAN_API_KEY"
             ))
         );
     }
 
-    // ─── Step 5: Post-Deploy Verification ───────────────────────────────────────
+    // ─── Post-Deploy Verification ─────────────────────────────────────────────
 
-    /// @notice Read-only verification of a deployed adapter. No broadcast needed.
+    /// @notice Read-only verification of a deployed adapter.
     ///         Usage: forge script script/DeploySwapAdapterV2.s.sol \
-    ///           --sig "verify(address)" <ADAPTER_ADDRESS> --rpc-url $SEPOLIA_RPC_URL
+    ///           --sig "verify(address)" <ADAPTER_ADDRESS> --rpc-url $RPC_URL
     function verify(address adapterAddr) external view {
+        address dustPoolV2 = vm.envAddress("DUST_POOL_V2");
+        address poolManager = vm.envAddress("POOL_MANAGER");
+        address chainlinkFeed = vm.envAddress("CHAINLINK_ETH_USD");
+
         DustSwapAdapterV2 adapter = DustSwapAdapterV2(payable(adapterAddr));
 
         console.log("========================================");
@@ -205,37 +177,30 @@ contract DeploySwapAdapterV2 is Script {
         console.log("========================================");
         console.log("");
 
-        // Ownership
         address owner = adapter.owner();
         console.log("Owner:             ", owner);
-        require(owner == DEPLOYER, "FAIL: Wrong owner");
-        console.log("  -> PASS: Owner matches deployer");
 
-        // Immutables
         address pm = address(adapter.POOL_MANAGER());
         address dp = address(adapter.DUST_POOL_V2());
         console.log("PoolManager:       ", pm);
         console.log("DustPoolV2:        ", dp);
-        require(pm == POOL_MANAGER, "FAIL: Wrong PoolManager");
-        require(dp == DUST_POOL_V2, "FAIL: Wrong DustPoolV2");
+        require(pm == poolManager, "FAIL: Wrong PoolManager");
+        require(dp == dustPoolV2, "FAIL: Wrong DustPoolV2");
         console.log("  -> PASS: Immutables correct");
 
-        // Relayer
-        bool relayerOk = adapter.authorizedRelayers(DEPLOYER);
+        bool relayerOk = adapter.authorizedRelayers(owner);
         console.log("Relayer authorized:", relayerOk);
         require(relayerOk, "FAIL: Relayer not authorized");
         console.log("  -> PASS: Relayer set");
 
-        // Oracle
         address oracleAddr = address(adapter.priceOracle());
         uint256 deviation = adapter.maxOracleDeviationBps();
         console.log("Oracle:            ", oracleAddr);
         console.log("Max deviation:     ", deviation, "bps");
-        require(oracleAddr == CHAINLINK_ETH_USD, "FAIL: Wrong oracle");
+        require(oracleAddr == chainlinkFeed, "FAIL: Wrong oracle");
         require(deviation == 1000, "FAIL: Unexpected deviation");
         console.log("  -> PASS: Oracle configured");
 
-        // Chainlink liveness
         IAggregatorV3Check feed = IAggregatorV3Check(oracleAddr);
         (, int256 price,, uint256 updatedAt,) = feed.latestRoundData();
         require(price > 0, "FAIL: Oracle returning zero");
@@ -244,8 +209,7 @@ contract DeploySwapAdapterV2 is Script {
         console.log("Last updated:      ", updatedAt);
         console.log("  -> PASS: Oracle live");
 
-        // DustPoolV2 authorization
-        IDustPoolV2Admin pool = IDustPoolV2Admin(DUST_POOL_V2);
+        IDustPoolV2Admin pool = IDustPoolV2Admin(dustPoolV2);
         bool poolAuth = pool.relayers(adapterAddr);
         console.log("Pool auth:         ", poolAuth);
         require(poolAuth, "FAIL: Adapter not authorized on pool");

@@ -794,7 +794,7 @@ export function useStealthScanner(stealthKeys: StealthKeyPair | null, options?: 
       } else if (silent && address) {
         // Background scan: only scan new blocks since last scan
         // Key includes chainId so scans are per-chain
-        startBlock = getLastScannedBlock(`${chainId}:${address}`) ?? config.deploymentBlock;
+        startBlock = getLastScannedBlock(address, chainId) ?? config.deploymentBlock;
       } else {
         // Full scan (manual trigger): always from deployment
         startBlock = config.deploymentBlock;
@@ -933,7 +933,7 @@ export function useStealthScanner(stealthKeys: StealthKeyPair | null, options?: 
       }
 
       if (address) {
-        saveLastScannedBlock(`${chainId}:${address}`, latestBlock);
+        saveLastScannedBlock(address, latestBlock, chainId);
       }
 
       if (!silent) {

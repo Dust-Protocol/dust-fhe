@@ -3,7 +3,7 @@
 import { useState, useCallback, useEffect, useMemo } from "react";
 import { formatUnits, parseUnits, zeroAddress } from "viem";
 import { ChevronDownIcon } from "lucide-react";
-import { SUPPORTED_TOKENS, type SwapToken, isSwapSupported, RELAYER_FEE_BPS, getUSDCAddress } from "@/lib/swap/constants";
+import { SUPPORTED_TOKENS, type SwapToken, isSwapSupported, RELAYER_FEE_BPS, getUSDCAddress, ETH_ADDRESS } from "@/lib/swap/constants";
 import { COMPLIANCE_COOLDOWN_THRESHOLD_USD } from "@/lib/dustpool/v2/constants";
 import { DEFAULT_CHAIN_ID } from "@/config/chains";
 import { useSwitchChain } from "wagmi";
@@ -157,16 +157,16 @@ export function SwapV2Card({ onPoolChange, oraclePrice }: { onPoolChange?: () =>
   }, [activeChainId]);
 
   const fromBalance = useMemo(() => {
-    const assetId = fromToken.symbol === "ETH" ? ethAssetId : usdcAssetId;
+    const assetId = fromToken.address === ETH_ADDRESS ? ethAssetId : usdcAssetId;
     if (!assetId) return 0n;
     return balances.get(assetId) ?? 0n;
-  }, [balances, fromToken.symbol, ethAssetId, usdcAssetId]);
+  }, [balances, fromToken.address, ethAssetId, usdcAssetId]);
 
   const toBalance = useMemo(() => {
-    const assetId = toToken.symbol === "ETH" ? ethAssetId : usdcAssetId;
+    const assetId = toToken.address === ETH_ADDRESS ? ethAssetId : usdcAssetId;
     if (!assetId) return 0n;
     return balances.get(assetId) ?? 0n;
-  }, [balances, toToken.symbol, ethAssetId, usdcAssetId]);
+  }, [balances, toToken.address, ethAssetId, usdcAssetId]);
 
   const formattedFromBalance = formatUnits(fromBalance, fromToken.decimals);
   const displayFromBalance = parseFloat(formattedFromBalance).toFixed(fromToken.decimals > 6 ? 4 : 2);
@@ -194,8 +194,8 @@ export function SwapV2Card({ onPoolChange, oraclePrice }: { onPoolChange?: () =>
     if (!oraclePrice || oraclePrice <= 0 || exchangeRate <= 0) return null;
     // For ETH→USDC: exchangeRate is USDC per ETH, oraclePrice is USDC per ETH
     // For USDC→ETH: exchangeRate is ETH per USDC, fair rate is 1/oraclePrice
-    const isFromEth = fromToken.symbol === 'ETH';
-    const fairRate = isFromEth ? oraclePrice : 1 / oraclePrice;
+    const isFromNative = fromToken.address === ETH_ADDRESS;
+    const fairRate = isFromNative ? oraclePrice : 1 / oraclePrice;
     if (fairRate <= 0) return null;
     return ((fairRate - exchangeRate) / fairRate) * 100;
   }, [oraclePrice, exchangeRate, fromToken.symbol]);
@@ -956,7 +956,7 @@ export function SwapV2Card({ onPoolChange, oraclePrice }: { onPoolChange?: () =>
 
               {(() => {
                 const humanAmt = parseFloat(formatUnits(amountInWei, fromToken.decimals));
-                const usd = fromToken.symbol === 'ETH' ? humanAmt * (oraclePrice ?? 0) : humanAmt;
+                const usd = fromToken.address === ETH_ADDRESS ? humanAmt * (oraclePrice ?? 0) : humanAmt;
                 return usd >= COMPLIANCE_COOLDOWN_THRESHOLD_USD;
               })() && (
                 <div className="text-[10px] text-[rgba(255,176,0,0.8)] font-mono mb-3">
