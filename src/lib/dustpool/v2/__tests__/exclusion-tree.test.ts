@@ -81,13 +81,25 @@ describe('exclusion-tree', () => {
       expect(result).toBe(false)
     })
 
-    it('returns false on empty tree', async () => {
-      // #given
+    it('returns true for sentinel commitment on fresh tree', async () => {
+      // #given — tree auto-seeds with sentinel (1n)
       const chainId = freshChainId()
       const { isCommitmentFlagged } = await getModule()
 
       // #when
       const result = await isCommitmentFlagged(chainId, 1n)
+
+      // #then — sentinel is always present
+      expect(result).toBe(true)
+    })
+
+    it('returns false for non-sentinel on fresh tree', async () => {
+      // #given
+      const chainId = freshChainId()
+      const { isCommitmentFlagged } = await getModule()
+
+      // #when
+      const result = await isCommitmentFlagged(chainId, 999n)
 
       // #then
       expect(result).toBe(false)
@@ -124,8 +136,8 @@ describe('exclusion-tree', () => {
   })
 
   describe('generateComplianceWitness', () => {
-    it('generates valid witness for unflagged commitment on empty tree', async () => {
-      // #given
+    it('generates valid witness for unflagged commitment on sentinel-only tree', async () => {
+      // #given — tree has sentinel (1n) but no user-added commitments
       const chainId = freshChainId()
       const { generateComplianceWitness } = await getModule()
 
@@ -134,9 +146,7 @@ describe('exclusion-tree', () => {
 
       // #then
       expect(witness.smtSiblings).toHaveLength(20)
-      expect(witness.smtIsOld0).toBe(1n) // empty tree = empty slot
-      expect(witness.smtOldKey).toBe(0n)
-      expect(witness.smtOldValue).toBe(0n)
+      expect(witness.exclusionRoot).not.toBe(0n)
     })
 
     it('generates valid witness for unflagged commitment on populated tree', async () => {
@@ -190,8 +200,8 @@ describe('exclusion-tree', () => {
       // #when
       await batchAddFlagged(chainId, [10n, 20n, 30n])
 
-      // #then
-      expect(await getFlaggedCount(chainId)).toBe(3)
+      // #then — 3 user commitments + 1 sentinel
+      expect(await getFlaggedCount(chainId)).toBe(4)
       expect(await isCommitmentFlagged(chainId, 10n)).toBe(true)
       expect(await isCommitmentFlagged(chainId, 20n)).toBe(true)
       expect(await isCommitmentFlagged(chainId, 30n)).toBe(true)
@@ -206,13 +216,13 @@ describe('exclusion-tree', () => {
       // #when
       await batchAddFlagged(chainId, [10n, 20n])
 
-      // #then
-      expect(await getFlaggedCount(chainId)).toBe(2)
+      // #then — 2 user commitments + 1 sentinel
+      expect(await getFlaggedCount(chainId)).toBe(3)
     })
   })
 
   describe('getExclusionRoot', () => {
-    it('returns 0 for empty tree', async () => {
+    it('returns non-zero for fresh tree (sentinel seeded)', async () => {
       // #given
       const chainId = freshChainId()
       const { getExclusionRoot } = await getModule()
@@ -220,13 +230,13 @@ describe('exclusion-tree', () => {
       // #when
       const root = await getExclusionRoot(chainId)
 
-      // #then
-      expect(root).toBe(0n)
+      // #then — sentinel ensures non-zero root
+      expect(root).not.toBe(0n)
     })
   })
 
   describe('getFlaggedCount', () => {
-    it('returns 0 for empty tree', async () => {
+    it('returns 1 for fresh tree (sentinel only)', async () => {
       // #given
       const chainId = freshChainId()
       const { getFlaggedCount } = await getModule()
@@ -234,8 +244,8 @@ describe('exclusion-tree', () => {
       // #when
       const count = await getFlaggedCount(chainId)
 
-      // #then
-      expect(count).toBe(0)
+      // #then — sentinel is always present
+      expect(count).toBe(1)
     })
   })
 })

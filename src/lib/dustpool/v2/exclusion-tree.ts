@@ -26,6 +26,11 @@ interface ExclusionCheckpoint {
   savedAt: number
 }
 
+// Sentinel ensures the SMT always has a non-zero root, even on cold start.
+// Without this, the contract rejects updateExclusionRoot(bytes32(0)) and the
+// compliance flow deadlocks. Value 1n can never be a valid Poseidon commitment.
+const SENTINEL_COMMITMENT = 1n
+
 // Module-level singletons
 const trees = new Map<number, SMTInstance>()
 const flaggedSets = new Map<number, Set<string>>()
@@ -89,6 +94,14 @@ async function initTree(chainId: number): Promise<SMTInstance> {
       await smt.insert(smt.F.e(key), smt.F.e(1n))
       flagged.add(normalize(key))
     }
+  }
+
+  // Bootstrap: insert sentinel so the root is always non-zero.
+  // Idempotent — skipped if sentinel already present from checkpoint.
+  if (!flagged.has(normalize(SENTINEL_COMMITMENT))) {
+    await smt.insert(smt.F.e(SENTINEL_COMMITMENT), smt.F.e(1n))
+    flagged.add(normalize(SENTINEL_COMMITMENT))
+    saveCheckpointAsync(chainId)
   }
 
   trees.set(chainId, smt)
