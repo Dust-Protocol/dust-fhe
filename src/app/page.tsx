@@ -10,7 +10,7 @@ import { isPrivyEnabled } from "@/config/privy";
 import { useConnect, useConnectors } from "wagmi";
 import { injected } from "wagmi/connectors";
 import DecryptedText from "@/components/DecryptedText";
-import { ProtocolMetrics } from "@/components/metrics/ProtocolMetrics";
+import { UnicornBackground } from "@/components/UnicornBackground";
 
 // One-time cleanup of stale cache data from previous sessions
 function cleanupCorruptedStorage() {
@@ -154,7 +154,7 @@ export default function Home() {
   return (
     <>
       <style>{`
-        @keyframes fade-up {
+@keyframes fade-up {
           from { opacity: 0; transform: translateY(24px); }
           to { opacity: 1; transform: translateY(0); }
         }
@@ -180,32 +180,10 @@ export default function Home() {
 
       <div className="min-h-screen bg-[#06080F] flex flex-col relative overflow-x-hidden">
 
-        {/* Mobile Background Video */}
-        <div className="absolute top-0 left-0 w-full h-full z-0 lg:hidden">
-          <video
-            autoPlay
-            loop
-            muted
-            playsInline
-            className="absolute inset-0 w-full h-full object-cover brightness-[0.5]"
-          >
-            <source src="/bg.webm" type="video/webm" />
-            <source src="/bg.mp4" type="video/mp4" />
-          </video>
-        </div>
-
-        {/* Desktop Background Video */}
-        <div className="absolute top-0 left-0 w-full h-full z-0 hidden lg:block">
-          <video
-            autoPlay
-            loop
-            muted
-            playsInline
-            className="absolute inset-0 w-full h-full object-cover brightness-[0.65]"
-          >
-            <source src="/bg.webm" type="video/webm" />
-            <source src="/bg.mp4" type="video/mp4" />
-          </video>
+        {/* Background — Unicorn Studio scene */}
+        {/* Background — Unicorn Studio scene */}
+        <div className="absolute inset-0 z-0">
+          <UnicornBackground projectId="u6WadcQNOJPARa5hXEQp" scale={1} dpi={1.5} />
         </div>
 
         {/* Header */}
@@ -251,12 +229,12 @@ export default function Home() {
 
         {/* Mobile Layout */}
         <div
-          className="flex lg:hidden flex-col w-full px-6 pt-20 pb-12 gap-6 z-10 min-h-[calc(100vh-80px)] justify-end"
+          className="flex lg:hidden flex-col w-full px-6 pb-16 gap-4 z-10 flex-1 justify-end"
         >
-          <div className="flex flex-col items-start gap-4 w-full">
+          <div className="flex flex-col items-start gap-3 w-full">
             <div>
               <p
-                className="text-[42px] text-white leading-[1.1] tracking-[-0.03em] mb-2"
+                className="text-[36px] text-white leading-[1.1] tracking-[-0.03em] mb-1"
                 style={{
                   fontFamily: "var(--font-instrument-serif), serif",
                   textShadow: "0 4px 24px rgba(0,0,0,0.6)",
@@ -265,7 +243,7 @@ export default function Home() {
                 Private Transfers<br />and Privacy Swap
               </p>
               <p
-                className="text-base text-white/85 leading-relaxed max-w-[300px]"
+                className="text-sm text-white/85 leading-relaxed max-w-[280px]"
                 style={{ textShadow: "0 2px 8px rgba(0,0,0,0.6)" }}
               >
                 Swap tokens anonymously without leaving a trace.
@@ -275,17 +253,17 @@ export default function Home() {
             {/* Pay Search Input */}
             <div className="flex items-center gap-2 w-full">
               <input
-                className="flex-1 h-14 bg-[rgba(20,20,25,0.6)] border border-white/15 rounded-2xl text-white text-base px-5 backdrop-blur-lg placeholder:text-white/50 focus:border-[#00FF41] focus:outline-none focus:bg-[rgba(20,20,25,0.8)] transition-all"
+                className="flex-1 h-12 bg-[rgba(20,20,25,0.6)] border border-white/15 rounded-2xl text-white text-sm px-4 backdrop-blur-lg placeholder:text-white/50 focus:border-[#00FF41] focus:outline-none focus:bg-[rgba(20,20,25,0.8)] transition-all"
                 placeholder="username.dust"
                 value={searchName}
                 onChange={(e) => setSearchName(e.target.value)}
                 onKeyDown={(e: KeyboardEvent<HTMLInputElement>) => { if (e.key === "Enter") handlePaySearch(); }}
               />
               <button
-                className="w-14 h-14 shrink-0 bg-[#00FF41] rounded-2xl flex items-center justify-center shadow-[0_4px_12px_rgba(0,0,0,0.3)] hover:shadow-[0_0_20px_rgba(0,255,65,0.4)] transition-all"
+                className="w-12 h-12 shrink-0 bg-[#00FF41] rounded-2xl flex items-center justify-center shadow-[0_4px_12px_rgba(0,0,0,0.3)] hover:shadow-[0_0_20px_rgba(0,255,65,0.4)] transition-all"
                 onClick={handlePaySearch}
               >
-                <ArrowUpRightIcon size={24} color="#06080F" />
+                <ArrowUpRightIcon size={20} color="#06080F" />
               </button>
             </div>
           </div>
@@ -352,23 +330,17 @@ export default function Home() {
 
         </div>
 
-        {/* Protocol Metrics */}
-        <div className="relative z-10 w-full px-6 md:px-[60px] pb-16">
-          <div className="max-w-[900px] mx-auto">
-            <ProtocolMetrics />
-          </div>
-        </div>
 
         {/* Footer */}
-        <div className="absolute bottom-5 left-0 w-full flex items-center justify-center gap-4 z-10 pointer-events-none">
-          <p className="text-white/50 text-[11px] font-mono">
+        <div className="absolute bottom-3 sm:bottom-5 left-0 w-full flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-4 z-10 pointer-events-none px-4">
+          <p className="text-white/50 text-[10px] sm:text-[11px] font-mono text-center">
             &copy; 2026 Dust Protocol. All rights reserved.
           </p>
           <a
             href="https://x.com/DustProtocolApp"
             target="_blank"
             rel="noopener noreferrer"
-            className="pointer-events-auto text-white/40 hover:text-[#00FF41] text-[11px] font-mono uppercase tracking-wider transition-colors"
+            className="pointer-events-auto text-white/40 hover:text-[#00FF41] text-[10px] sm:text-[11px] font-mono uppercase tracking-wider transition-colors"
           >
             Follow us on X
           </a>
