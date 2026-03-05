@@ -66,6 +66,7 @@ describe("ShieldedEvmFacilitatorScheme", () => {
 
     const payload = {
       x402Version: 2,
+      resource: { url: "", description: "", mimeType: "" },
       accepted: {},
       payload: {
         proof: ("0x" + "ab".repeat(384)) as `0x${string}`,
@@ -84,8 +85,8 @@ describe("ShieldedEvmFacilitatorScheme", () => {
     };
 
     const requirements = {
-      scheme: "shielded",
-      network: "eip155:84532",
+      scheme: "shielded" as const,
+      network: "eip155:84532" as const,
       amount: "1000000",
       asset: "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
       payTo: "0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb0",
@@ -93,7 +94,7 @@ describe("ShieldedEvmFacilitatorScheme", () => {
       extra: {},
     };
 
-    const result = await scheme.verify(payload, requirements);
+    const result = await scheme.verify(payload as unknown as Parameters<typeof scheme.verify>[0], requirements);
     expect(result.isValid).toBe(false);
     expect(result.invalidReason).toContain("nullifier");
   });

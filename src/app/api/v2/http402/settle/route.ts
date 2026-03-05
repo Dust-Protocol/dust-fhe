@@ -10,7 +10,7 @@ import { acquireNullifier, releaseNullifier } from '@/lib/dustpool/v2/pending-nu
 import { screenRecipient } from '@/lib/dustpool/v2/relayer-compliance'
 import { incrementHttp402Payment, observeGasUsed } from '@/lib/metrics'
 import type { PaymentProof, PrivacyLevel } from '@/types/http402'
-import { receiptStore } from '../receipt/route'
+import { receiptStore } from '../receipt-store'
 
 export const maxDuration = 60
 

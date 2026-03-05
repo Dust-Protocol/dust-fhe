@@ -6,7 +6,7 @@ import { getDustPoolV2Address, DUST_POOL_V2_ABI } from '@/lib/dustpool/v2/contra
 import { toBytes32Hex } from '@/lib/dustpool/poseidon'
 import { incrementHttp402Payment } from '@/lib/metrics'
 import type { PaymentProof, PaymentRequirement, PaymentReceipt, PrivacyLevel } from '@/types/http402'
-import { receiptStore } from '../receipt/route'
+import { receiptStore } from '../receipt-store'
 
 export const maxDuration = 30
 

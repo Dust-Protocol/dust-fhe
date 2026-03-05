@@ -13,6 +13,7 @@ import express from "express";
 import { createPublicClient, createWalletClient, http, encodeFunctionData } from "viem";
 import { baseSepolia } from "viem/chains";
 import { privateKeyToAccount } from "viem/accounts";
+import type { PaymentPayload, PaymentRequirements } from "@x402/core/types";
 import { ShieldedEvmFacilitatorScheme } from "@x402/privacy/facilitator";
 import type { FacilitatorEvmSigner } from "@x402/privacy/facilitator";
 import {
@@ -85,11 +86,15 @@ app.post("/verify", async (req, res) => {
 
   try {
     const result = await facilitator.verify(
-      { payload: { proof, publicSignals } },
+      { x402Version: 2, resource: { url: "", description: "", mimeType: "" }, accepted: {}, payload: { proof, publicSignals } } as unknown as PaymentPayload,
       {
+        scheme: "shielded",
         amount: amount ?? "100000",
         network: network ?? NETWORK,
         payTo: payTo ?? account?.address ?? "0x0",
+        asset: DEFAULT_ASSETS[NETWORK].address,
+        maxTimeoutSeconds: 300,
+        extra: {},
       },
     );
     console.log(`Verify: ${result.isValid ? "VALID" : `INVALID (${result.invalidReason})`}`);

@@ -5,6 +5,11 @@ declare module "snarkjs" {
       wasmPath: string,
       zkeyPath: string,
     ): Promise<{ proof: unknown; publicSignals: string[] }>;
+    verify(
+      vkey: unknown,
+      publicSignals: string[],
+      proof: unknown,
+    ): Promise<boolean>;
     exportSolidityCallData(
       publicSignals: string[],
       proof: unknown,

@@ -20,6 +20,7 @@ import { createPublicClient, createWalletClient, http } from "viem";
 import { baseSepolia } from "viem/chains";
 import { privateKeyToAccount } from "viem/accounts";
 
+import type { PaymentPayload, PaymentRequirements } from "@x402/core/types";
 import { ShieldedEvmFacilitatorScheme } from "../src/facilitator/scheme";
 import { POOL_ADDRESSES, DEFAULT_ASSETS } from "../src/constants";
 import type { FacilitatorEvmSigner } from "../src/facilitator/types";
@@ -119,11 +120,15 @@ app.post("/verify", async (req, res) => {
 
   try {
     const result = await facilitator.verify(
-      { payload: { proof, publicSignals } },
+      { x402Version: 2, resource: { url: "", description: "", mimeType: "" }, accepted: {}, payload: { proof, publicSignals } } as unknown as PaymentPayload,
       {
+        scheme: "shielded",
         amount: req.body.amount ?? "100000",
         network: req.body.network ?? NETWORK,
         payTo: req.body.payTo ?? "0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb0",
+        asset: req.body.asset ?? DEFAULT_ASSETS[NETWORK].address,
+        maxTimeoutSeconds: 300,
+        extra: {},
       },
     );
     res.json(result);
@@ -146,11 +151,15 @@ app.post("/settle", async (req, res) => {
 
   try {
     const result = await facilitator.settle(
-      { payload: { proof, publicSignals } },
+      { x402Version: 2, resource: { url: "", description: "", mimeType: "" }, accepted: {}, payload: { proof, publicSignals } } as unknown as PaymentPayload,
       {
+        scheme: "shielded",
         network: req.body.network ?? NETWORK,
+        amount: req.body.amount ?? "100000",
         payTo: payTo ?? "0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb0",
         asset: asset ?? DEFAULT_ASSETS[NETWORK].address,
+        maxTimeoutSeconds: 300,
+        extra: {},
       },
     );
     res.json(result);

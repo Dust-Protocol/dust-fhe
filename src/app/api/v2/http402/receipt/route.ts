@@ -1,10 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
-import type { PaymentReceipt } from '@/types/http402'
+import { receiptStore } from '../receipt-store'
 
 const NO_STORE = { 'Cache-Control': 'no-store' } as const
-
-// MVP: in-memory receipt store. Production would use a database.
-export const receiptStore = new Map<string, PaymentReceipt>()
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
   try {
