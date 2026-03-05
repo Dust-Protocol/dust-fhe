@@ -30,7 +30,7 @@ async function buildInputNote(
 ): Promise<NoteCommitmentV2> {
   const note = createNote(owner, amount, asset, chainId)
   const commitment = await computeNoteCommitment(note)
-  return { note, commitment, leafIndex }
+  return { note, commitment, leafIndex, spent: false, createdAt: Date.now() }
 }
 
 // ── Send to external EOA — recipient field ──────────────────────────────────
