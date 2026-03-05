@@ -3,7 +3,6 @@
 import { useState, useEffect, useCallback, useMemo, useRef, type RefObject, type ReactNode } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { parseEther, parseUnits, formatEther, formatUnits, isAddress, zeroAddress, type Address } from "viem";
-import { useAccount } from "wagmi";
 import { useV2Withdraw, useV2Notes, useV2Split } from "@/hooks/dustpool/v2";
 import { useV2Compliance } from "@/hooks/dustpool/v2/useV2Compliance";
 import { useChainlinkPrice } from "@/hooks/swap/useChainlinkPrice";
@@ -47,7 +46,6 @@ export function V2SendModal({
   chainId,
   balances,
 }: V2SendModalProps) {
-  const { address } = useAccount();
   const { withdraw, isPending, status, txHash, error, clearError } = useV2Withdraw(keysRef, chainId);
   const { split, isPending: isSplitPending, status: splitStatus, error: splitError, clearError: clearSplitError } = useV2Split(keysRef, chainId);
   const { unspentNotes, refreshNotes } = useV2Notes(keysRef, chainId);
@@ -230,7 +228,7 @@ export function V2SendModal({
     return `${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
   };
 
-  const canWithdraw = parsedAmount !== null && !exceedsBalance && isValidRecipient && !isPending && !isSplitPending && !cooldownBlocksSubmit;
+  const canSend = parsedAmount !== null && !exceedsBalance && isValidRecipient && !isPending && !isSplitPending && !cooldownBlocksSubmit;
 
   const tokenSymbol = selectedAsset?.symbol ?? "ETH";
   const chunks = parsedAmount ? decomposeForToken(parsedAmount, tokenSymbol) : [];
@@ -245,7 +243,7 @@ export function V2SendModal({
   const activeError = useSplitFlow ? splitError : error;
   const activeClearError = useSplitFlow ? clearSplitError : clearError;
 
-  const handleWithdraw = async () => {
+  const handleSend = async () => {
     if (!parsedAmount || !isValidRecipient || !selectedAsset) return;
     const assetAddr = selectedAsset.address;
     if (useSplitFlow) {
@@ -490,7 +488,7 @@ export function V2SendModal({
                           </p>
                           {cooldownOriginator && (
                             <p className="text-[11px] text-[rgba(255,255,255,0.4)] font-mono leading-relaxed">
-                              Withdrawal must go to original depositor:{" "}
+                              During cooldown, funds can only be sent to the original depositor:{" "}
                               <span className="text-[rgba(255,255,255,0.6)] break-all">{cooldownOriginator}</span>
                             </p>
                           )}
@@ -507,7 +505,7 @@ export function V2SendModal({
                   {/* Relayer fee notice */}
                   <div className="p-2.5 rounded-sm bg-[rgba(255,255,255,0.02)] border border-[rgba(255,255,255,0.05)]">
                     <p className="text-[11px] text-[rgba(255,255,255,0.4)] font-mono">
-                      Withdrawal is processed via relayer. A small fee may apply to cover gas.
+                      Payment is processed via relayer. A small fee may apply to cover gas.
                     </p>
                   </div>
 
@@ -530,8 +528,8 @@ export function V2SendModal({
                   {/* Send button */}
                   <button
                     data-testid="send-submit"
-                    onClick={handleWithdraw}
-                    disabled={!canWithdraw}
+                    onClick={handleSend}
+                    disabled={!canSend}
                     className="w-full py-3 rounded-sm bg-[rgba(0,255,65,0.1)] border border-[rgba(0,255,65,0.2)] hover:bg-[rgba(0,255,65,0.15)] hover:border-[#00FF41] hover:shadow-[0_0_15px_rgba(0,255,65,0.15)] transition-all text-sm font-bold text-[#00FF41] font-mono tracking-wider disabled:opacity-40 disabled:cursor-not-allowed"
                   >
                     {parsedAmount

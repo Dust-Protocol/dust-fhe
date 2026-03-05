@@ -11,12 +11,13 @@ import { ShieldIcon, LockIcon, ETHIcon, USDCIcon } from "@/components/stealth/ic
 import { V2DepositModal } from "./V2DepositModal";
 import { V2WithdrawModal } from "./V2WithdrawModal";
 import { V2TransferModal } from "./V2TransferModal";
+import { V2SendModal } from "./V2SendModal";
 
 interface V2PoolCardProps {
   chainId?: number;
 }
 
-type ModalType = "deposit" | "withdraw" | "transfer" | null;
+type ModalType = "deposit" | "withdraw" | "send" | "transfer" | null;
 
 export function V2PoolCard({ chainId: chainIdOverride }: V2PoolCardProps) {
   const { isConnected } = useAccount();
@@ -205,7 +206,7 @@ export function V2PoolCard({ chainId: chainIdOverride }: V2PoolCardProps) {
         )}
 
         {/* Action buttons */}
-        <div className="grid grid-cols-3 gap-2">
+        <div className="grid grid-cols-4 gap-2">
           <button
             onClick={() => setActiveModal("deposit")}
             disabled={!hasKeys}
@@ -219,6 +220,13 @@ export function V2PoolCard({ chainId: chainIdOverride }: V2PoolCardProps) {
             className="py-2.5 px-2 rounded-sm border border-[rgba(255,255,255,0.1)] hover:border-[#00FF41] hover:bg-[rgba(0,255,65,0.05)] transition-all text-xs font-bold text-white hover:text-[#00FF41] font-mono disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:border-[rgba(255,255,255,0.1)] disabled:hover:bg-transparent disabled:hover:text-white"
           >
             [ WITHDRAW ]
+          </button>
+          <button
+            onClick={() => setActiveModal("send")}
+            disabled={!hasKeys || !hasAnyBalance}
+            className="py-2.5 px-2 rounded-sm border border-[rgba(124,127,255,0.2)] hover:border-[#7c7fff] hover:bg-[rgba(124,127,255,0.08)] transition-all text-xs font-bold text-[#7c7fff] hover:text-white font-mono disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:border-[rgba(124,127,255,0.2)] disabled:hover:bg-transparent disabled:hover:text-[#7c7fff]"
+          >
+            [ SEND ]
           </button>
           <button
             onClick={() => setActiveModal("transfer")}
@@ -246,6 +254,13 @@ export function V2PoolCard({ chainId: chainIdOverride }: V2PoolCardProps) {
       />
       <V2WithdrawModal
         isOpen={activeModal === "withdraw"}
+        onClose={handleModalClose}
+        keysRef={keysRef}
+        chainId={chainId}
+        balances={balances}
+      />
+      <V2SendModal
+        isOpen={activeModal === "send"}
         onClose={handleModalClose}
         keysRef={keysRef}
         chainId={chainId}
