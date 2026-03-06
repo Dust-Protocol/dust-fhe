@@ -230,8 +230,10 @@ export default function PayPageClient({ name }: { name: string }) {
 
   const fullName = formatName(name);
 
-  const doResolve = useCallback(async () => {
-    if (resolvedMeta || resolvingRef.current || !isConfigured) return;
+  const retryCountRef = useRef(0);
+
+  const doResolve = useCallback(async (force = false) => {
+    if ((!force && resolvedMeta) || resolvingRef.current || !isConfigured) return;
     resolvingRef.current = true;
     setMetaResolving(true);
     setResolveError(false);
@@ -239,13 +241,31 @@ export default function PayPageClient({ name }: { name: string }) {
       const resolved = await resolveName(name + NAME_SUFFIX);
       if (resolved) {
         setResolvedMeta(`st:eth:${resolved}`);
+        retryCountRef.current = 0;
       } else {
         const resolved2 = await resolveName(name);
-        if (resolved2) setResolvedMeta(`st:thanos:${resolved2}`);
-        else setResolveError(true);
+        if (resolved2) {
+          setResolvedMeta(`st:thanos:${resolved2}`);
+          retryCountRef.current = 0;
+        } else {
+          // Auto-retry once on initial load (RPC timeout)
+          if (!force && retryCountRef.current < 1) {
+            retryCountRef.current++;
+            resolvingRef.current = false;
+            await new Promise((r) => setTimeout(r, 2000));
+            return doResolve(true);
+          }
+          setResolveError(true);
+        }
       }
     } catch (e) {
       console.error('[pay] Name resolution failed:', e);
+      if (!force && retryCountRef.current < 1) {
+        retryCountRef.current++;
+        resolvingRef.current = false;
+        await new Promise((r) => setTimeout(r, 2000));
+        return doResolve(true);
+      }
       setResolveError(true);
     } finally {
       resolvingRef.current = false;
@@ -390,7 +410,7 @@ export default function PayPageClient({ name }: { name: string }) {
                           <AlertCircleIcon size={20} color="#ef4444" />
                           <span className="text-xs text-[#ef4444] font-mono">Could not resolve {fullName}</span>
                           <button
-                            onClick={() => { setResolveError(false); setResolvedMeta(null); }}
+                            onClick={() => doResolve(true)}
                             className="text-[11px] text-[#00FF41] font-mono underline cursor-pointer bg-transparent border-none"
                           >
                             Retry
@@ -466,9 +486,9 @@ export default function PayPageClient({ name }: { name: string }) {
                           {/* Preview button */}
                           <button
                             onClick={handlePreview}
-                            disabled={!amount || !resolvedMeta || isLoading}
+                            disabled={!amount || !resolvedMeta}
                             className={`w-full py-3 rounded-sm font-mono text-xs font-semibold tracking-wider flex items-center justify-center gap-2 transition-all ${
-                              amount && resolvedMeta && !isLoading
+                              amount && resolvedMeta
                                 ? "border border-[rgba(0,255,65,0.2)] bg-[rgba(0,255,65,0.1)] text-[#00FF41] cursor-pointer hover:bg-[rgba(0,255,65,0.15)] hover:border-[#00FF41] hover:shadow-[0_0_15px_rgba(0,255,65,0.15)]"
                                 : "border border-[rgba(255,255,255,0.06)] bg-[rgba(255,255,255,0.02)] text-[rgba(255,255,255,0.3)] cursor-not-allowed"
                             }`}
