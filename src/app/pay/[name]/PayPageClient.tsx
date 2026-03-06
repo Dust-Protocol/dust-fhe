@@ -1,77 +1,257 @@
 "use client";
 
-import React, { useState, useEffect, useCallback, ChangeEvent } from "react";
-import { useAccount, useConnect } from "wagmi";
+import React, { useState, useEffect, useCallback, useRef, useMemo, type ChangeEvent } from "react";
+import { useAccount, useConnect, useChainId } from "wagmi";
 import { injected } from "wagmi/connectors";
-import { colors, radius, glass, shadows, buttonVariants, inputStates, transitions, typography, getExplorerBase } from "@/lib/design/tokens";
+import { getExplorerBase } from "@/lib/design/tokens";
 import { useStealthSend, useStealthName } from "@/hooks/stealth";
 import { NAME_SUFFIX } from "@/lib/stealth";
-import { getChainConfig, DEFAULT_CHAIN_ID } from "@/config/chains";
+import { getSupportedChains, getChainConfig, DEFAULT_CHAIN_ID } from "@/config/chains";
+import { getTokensForChain, NATIVE_TOKEN_ADDRESS, type TokenConfig } from "@/config/tokens";
+import { ChainIcon, TokenIcon } from "@/components/stealth/icons";
 import Link from "next/link";
 import { NoOptInPayment } from "@/components/pay/NoOptInPayment";
 import {
-  ShieldIcon, AlertCircleIcon, ArrowUpRightIcon, LockIcon,
+  AlertCircleIcon, ArrowUpRightIcon, LockIcon,
   WalletIcon, SendIcon, CopyIcon,
 } from "@/components/stealth/icons";
 import { DustLogo } from "@/components/DustLogo";
 
-const animations = `
-@keyframes dust-success-scale {
-  0% { transform: scale(0.6); opacity: 0; }
-  50% { transform: scale(1.05); }
-  100% { transform: scale(1); opacity: 1; }
+const SUPPORTED_CHAINS = getSupportedChains();
+
+// ─── Chain Selector ──────────────────────────────────────────────────────────
+function PayChainSelector({
+  selectedChainId,
+  onChange,
+}: {
+  selectedChainId: number;
+  onChange: (chainId: number) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  const chain = getChainConfig(selectedChainId);
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        onClick={() => setOpen(!open)}
+        className={`flex items-center gap-2 px-3 py-2.5 rounded-sm border text-xs font-mono transition-all w-full ${
+          open
+            ? "border-[#00FF41] bg-[rgba(0,255,65,0.02)]"
+            : "border-[rgba(255,255,255,0.1)] bg-[rgba(255,255,255,0.03)] hover:border-[rgba(0,255,65,0.2)]"
+        }`}
+      >
+        <ChainIcon size={18} chainId={selectedChainId} />
+        <span className="text-white font-medium flex-1 text-left">{chain.name}</span>
+        <span className="text-[rgba(255,255,255,0.3)] text-[10px]">{chain.nativeCurrency.symbol}</span>
+        <svg
+          width="10" height="10" viewBox="0 0 10 10"
+          className={`text-[rgba(255,255,255,0.3)] transition-transform duration-150 ${open ? "rotate-180" : ""}`}
+        >
+          <path d="M2 3.5L5 6.5L8 3.5" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round" />
+        </svg>
+      </button>
+
+      {open && (
+        <div className="absolute top-full mt-1 left-0 right-0 bg-[#0a0d14] border border-[rgba(255,255,255,0.1)] rounded-sm min-w-[200px] z-50 overflow-hidden"
+          style={{ boxShadow: "0 8px 32px -4px rgba(0,0,0,0.8)" }}
+        >
+          {SUPPORTED_CHAINS.map((c) => {
+            const active = c.id === selectedChainId;
+            return (
+              <button
+                key={c.id}
+                onClick={() => { onChange(c.id); setOpen(false); }}
+                className={`w-full text-left px-3 py-2.5 text-[11px] font-mono transition-all flex items-center gap-2.5 ${
+                  active
+                    ? "text-[#00FF41] bg-[rgba(0,255,65,0.05)]"
+                    : "text-[rgba(255,255,255,0.6)] hover:bg-[rgba(0,255,65,0.05)] hover:text-[#00FF41]"
+                }`}
+              >
+                <ChainIcon size={16} chainId={c.id} />
+                <span className="flex-1">{c.name}</span>
+                <span className="text-[rgba(255,255,255,0.3)] text-[10px]">{c.nativeCurrency.symbol}</span>
+                {active && <span className="text-[#00FF41] text-xs">&#10003;</span>}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
 }
-@keyframes dust-check-draw {
-  0% { stroke-dashoffset: 24; }
-  100% { stroke-dashoffset: 0; }
+
+// ─── Token Selector ──────────────────────────────────────────────────────────
+
+interface TokenOption {
+  address: string;
+  symbol: string;
+  name: string;
+  decimals: number;
+  isNative: boolean;
 }
-@keyframes dust-fade-up {
-  0% { transform: translateY(12px); opacity: 0; }
-  100% { transform: translateY(0); opacity: 1; }
+
+function PayTokenSelector({
+  chainId,
+  selectedToken,
+  onChange,
+}: {
+  chainId: number;
+  selectedToken: string;
+  onChange: (address: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  const tokens = useMemo((): TokenOption[] => {
+    const chain = getChainConfig(chainId);
+    const native: TokenOption = {
+      address: NATIVE_TOKEN_ADDRESS,
+      symbol: chain.nativeCurrency.symbol,
+      name: chain.nativeCurrency.name,
+      decimals: chain.nativeCurrency.decimals,
+      isNative: true,
+    };
+    const erc20s: TokenOption[] = getTokensForChain(chainId).map((t: TokenConfig) => ({
+      ...t, isNative: false,
+    }));
+    return [native, ...erc20s];
+  }, [chainId]);
+
+  const selected = tokens.find((t) => t.address === selectedToken) ?? tokens[0];
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        onClick={() => setOpen(!open)}
+        className={`flex items-center gap-1.5 px-2.5 py-2.5 rounded-sm border text-[11px] font-mono font-bold transition-all ${
+          open
+            ? "border-[#00FF41] bg-[rgba(0,255,65,0.1)] text-[#00FF41]"
+            : "border-[rgba(255,255,255,0.1)] bg-[rgba(255,255,255,0.03)] text-white hover:border-[rgba(0,255,65,0.2)]"
+        }`}
+      >
+        <TokenIcon symbol={selected.symbol} size={14} />
+        <span>{selected.symbol}</span>
+        <svg
+          width="8" height="8" viewBox="0 0 10 10"
+          className={`text-[rgba(255,255,255,0.3)] transition-transform duration-150 ml-0.5 ${open ? "rotate-180" : ""}`}
+        >
+          <path d="M2 3.5L5 6.5L8 3.5" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round" />
+        </svg>
+      </button>
+
+      {open && (
+        <div className="absolute top-full mt-1 right-0 bg-[#0a0d14] border border-[rgba(255,255,255,0.1)] rounded-sm min-w-[180px] z-50 overflow-hidden"
+          style={{ boxShadow: "0 8px 32px -4px rgba(0,0,0,0.8)" }}
+        >
+          {tokens.map((t) => {
+            const active = t.address === selectedToken;
+            return (
+              <button
+                key={t.address}
+                onClick={() => { onChange(t.address); setOpen(false); }}
+                className={`w-full text-left px-3 py-2.5 text-[11px] font-mono transition-all flex items-center gap-2.5 ${
+                  active
+                    ? "text-[#00FF41] bg-[rgba(0,255,65,0.05)]"
+                    : "text-[rgba(255,255,255,0.6)] hover:bg-[rgba(0,255,65,0.05)] hover:text-[#00FF41]"
+                }`}
+              >
+                <TokenIcon symbol={t.symbol} size={16} />
+                <span className="flex-1 font-medium">{t.symbol}</span>
+                <span className="text-[rgba(255,255,255,0.25)] text-[10px] font-normal">{t.name}</span>
+                {active && <span className="text-[#00FF41] text-xs ml-1">&#10003;</span>}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
 }
-@keyframes dust-confetti {
-  0% { transform: translateY(0) rotate(0deg); opacity: 1; }
-  100% { transform: translateY(-80px) rotate(360deg); opacity: 0; }
-}
-@keyframes dust-shimmer {
-  0% { background-position: -200% 0; }
-  100% { background-position: 200% 0; }
-}
-@keyframes dust-ring-expand {
-  0% { transform: scale(0.8); opacity: 0.6; }
-  100% { transform: scale(2.5); opacity: 0; }
-}
-`;
+
+// ─── Main Component ──────────────────────────────────────────────────────────
 
 export default function PayPageClient({ name }: { name: string }) {
   const { isConnected } = useAccount();
   const { connect } = useConnect();
+  const walletChainId = useChainId();
   const { resolveName, formatName, isConfigured } = useStealthName();
-  const chainId = DEFAULT_CHAIN_ID;
-  const chainConfig = getChainConfig(chainId);
-  const { generateAddressFor, sendEthToStealth, isLoading, error: sendError } = useStealthSend(chainId);
+
+  // Cross-chain state
+  const [selectedChainId, setSelectedChainId] = useState(DEFAULT_CHAIN_ID);
+  const [selectedToken, setSelectedToken] = useState(NATIVE_TOKEN_ADDRESS);
+  const chainConfig = getChainConfig(selectedChainId);
+  const chainMismatch = isConnected && walletChainId !== selectedChainId;
+
+  const { generateAddressFor, sendEthToStealth, sendTokenToStealth, isLoading, error: sendError } = useStealthSend(selectedChainId);
+
+  const isNativeToken = selectedToken === NATIVE_TOKEN_ADDRESS;
+  const selectedTokenConfig = useMemo(() => {
+    if (isNativeToken) return null;
+    return getTokensForChain(selectedChainId).find(
+      (t) => t.address.toLowerCase() === selectedToken.toLowerCase()
+    ) ?? null;
+  }, [selectedChainId, selectedToken, isNativeToken]);
+
+  const displaySymbol = isNativeToken
+    ? chainConfig.nativeCurrency.symbol
+    : (selectedTokenConfig?.symbol ?? "???");
+
+  const handleChainChange = useCallback((chainId: number) => {
+    setSelectedChainId(chainId);
+    setSelectedToken(NATIVE_TOKEN_ADDRESS);
+    setSendStep("input");
+  }, []);
 
   const [activeTab, setActiveTab] = useState<"wallet" | "qr">("wallet");
   const [resolvedMeta, setResolvedMeta] = useState<string | null>(null);
   const [metaResolving, setMetaResolving] = useState(false);
+  const resolvingRef = useRef(false);
   const [amount, setAmount] = useState("");
   const [sendStep, setSendStep] = useState<"input" | "confirm" | "success">("input");
   const [sendTxHash, setSendTxHash] = useState<string | null>(null);
+  const [resolveError, setResolveError] = useState(false);
 
   const fullName = formatName(name);
 
   const doResolve = useCallback(async () => {
-    if (resolvedMeta || metaResolving || !isConfigured) return;
+    if (resolvedMeta || resolvingRef.current || !isConfigured) return;
+    resolvingRef.current = true;
     setMetaResolving(true);
-    const resolved = await resolveName(name + NAME_SUFFIX);
-    if (resolved) {
-      setResolvedMeta(`st:eth:${resolved}`);
-    } else {
-      const resolved2 = await resolveName(name);
-      if (resolved2) setResolvedMeta(`st:thanos:${resolved2}`);
+    setResolveError(false);
+    try {
+      const resolved = await resolveName(name + NAME_SUFFIX);
+      if (resolved) {
+        setResolvedMeta(`st:eth:${resolved}`);
+      } else {
+        const resolved2 = await resolveName(name);
+        if (resolved2) setResolvedMeta(`st:thanos:${resolved2}`);
+        else setResolveError(true);
+      }
+    } catch (e) {
+      console.error('[pay] Name resolution failed:', e);
+      setResolveError(true);
+    } finally {
+      resolvingRef.current = false;
+      setMetaResolving(false);
     }
-    setMetaResolving(false);
-  }, [resolvedMeta, metaResolving, isConfigured, name, resolveName]);
+  }, [resolvedMeta, isConfigured, name, resolveName]);
 
   useEffect(() => { doResolve(); }, [doResolve]);
 
@@ -82,359 +262,253 @@ export default function PayPageClient({ name }: { name: string }) {
 
   const handleSend = async () => {
     if (!resolvedMeta) return;
-    const hash = await sendEthToStealth(resolvedMeta, amount);
+    let hash: string | null;
+    if (isNativeToken) {
+      hash = await sendEthToStealth(resolvedMeta, amount);
+    } else {
+      hash = await sendTokenToStealth(resolvedMeta, selectedToken, amount);
+    }
     if (hash) { setSendTxHash(hash); setSendStep("success"); }
+  };
+
+  const resetPayment = () => {
+    setSendStep("input");
+    setAmount("");
+    setSendTxHash(null);
   };
 
   const isSuccess = sendStep === "success";
 
   return (
-    <div style={{ minHeight: "100vh", background: colors.bg.page, color: colors.text.primary, display: "flex", flexDirection: "column" }}>
-      <style>{animations}</style>
+    <div className="min-h-screen bg-[#06080F] text-white flex flex-col">
 
-      {/* Header */}
-      <header style={{
-        borderBottom: `1px solid ${colors.border.default}`,
-        background: glass.modal.bg,
-        backdropFilter: glass.modal.backdropFilter,
-        boxShadow: shadows.card,
-        padding: "16px 24px",
-        position: "sticky",
-        top: 0,
-        zIndex: 10,
-      }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", maxWidth: "600px", margin: "0 auto" }}>
-          <Link href="/" style={{ textDecoration: "none" }}>
-            <div style={{ display: "flex", gap: "8px", alignItems: "center", cursor: "pointer" }}>
-              <DustLogo size={24} color={colors.accent.indigo} />
-              <span style={{ fontSize: "20px", fontWeight: 800, color: colors.text.primary, fontFamily: typography.fontFamily.heading, letterSpacing: "-0.03em" }}>
-                Dust
-              </span>
+      {/* ── Header ── */}
+      <header className="border-b border-white/[0.04] bg-[#06080F]/95 backdrop-blur-md sticky top-0 z-10">
+        <div className="flex justify-between items-center max-w-[480px] mx-auto px-5 py-3.5">
+          <Link href="/" className="no-underline">
+            <div className="flex gap-2 items-center cursor-pointer">
+              <DustLogo size={20} color="#00FF41" />
+              <span className="text-[16px] font-bold text-white tracking-tight">Dust</span>
             </div>
           </Link>
-          <div style={{ padding: "5px 12px", backgroundColor: "rgba(0,255,65,0.12)", border: "1px solid rgba(0,255,65,0.2)", borderRadius: radius.full }}>
-            <span style={{ fontSize: "11px", color: colors.accent.indigoBright, fontWeight: 600, letterSpacing: "0.02em", fontFamily: typography.fontFamily.heading }}>Payment</span>
+          <div className="px-2.5 py-1 bg-[rgba(0,255,65,0.06)] border border-[rgba(0,255,65,0.15)] rounded-sm">
+            <span className="text-[9px] text-[#00FF41] font-mono font-semibold tracking-wider uppercase">Payment</span>
           </div>
         </div>
       </header>
 
-      {/* Content */}
-      <div style={{ flex: 1, display: "flex", justifyContent: "center", padding: "48px 16px" }}>
-        <div style={{ width: "100%", maxWidth: "460px" }}>
-          <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
-            {/* Main payment card */}
-            <div style={{ width: "100%", position: "relative" }}>
-              {/* Gradient border effect */}
-              <div style={{
-                position: "absolute", inset: "-2px", borderRadius: "26px",
-                background: "linear-gradient(135deg, #00FF41, #7C3AED, #00FF41)",
-                opacity: isSuccess ? 0.8 : 0.15,
-                transition: "opacity 0.6s ease",
-              }} />
+      {/* ── Content ── */}
+      <div className="flex-1 flex justify-center px-4 py-10">
+        <div className="w-full max-w-[440px]">
+          <div className="flex flex-col gap-4">
 
-              <div style={{ background: colors.bg.cardSolid, borderRadius: radius.xl, overflow: "hidden", width: "100%", position: "relative", boxShadow: shadows.card }}>
+            {/* ── Main Card ── */}
+            <div className="relative">
+              {/* Corner accents */}
+              <div className="absolute top-0 left-0 w-2 h-2 border-t border-l border-[rgba(255,255,255,0.1)]" />
+              <div className="absolute top-0 right-0 w-2 h-2 border-t border-r border-[rgba(255,255,255,0.1)]" />
+              <div className="absolute bottom-0 left-0 w-2 h-2 border-b border-l border-[rgba(255,255,255,0.1)]" />
+              <div className="absolute bottom-0 right-0 w-2 h-2 border-b border-r border-[rgba(255,255,255,0.1)]" />
 
-                {/* Recipient header */}
-                <div style={{
-                  padding: "28px 24px 24px",
-                  textAlign: "center",
-                  background: isSuccess
-                    ? "linear-gradient(180deg, rgba(34, 197, 94, 0.06) 0%, transparent 100%)"
-                    : "linear-gradient(180deg, rgba(43, 90, 226, 0.04) 0%, transparent 100%)",
-                  borderBottom: isSuccess ? "none" : `1px solid ${colors.border.default}`,
-                  transition: "background 0.4s ease",
-                }}>
-                  <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "10px" }}>
-                    <div style={{ padding: "14px", backgroundColor: isSuccess ? "rgba(34, 197, 94, 0.1)" : "rgba(43, 90, 226, 0.08)", borderRadius: "50%", transition: "background-color 0.4s ease", position: "relative" }}>
-                      {isSuccess && (
-                        <div style={{ position: "absolute", inset: 0, borderRadius: "50%", border: "2px solid rgba(34, 197, 94, 0.3)", animation: "dust-ring-expand 1s ease-out forwards" }} />
-                      )}
-                      <ShieldIcon size={26} color={isSuccess ? "#22C55E" : colors.accent.indigo} />
+              <div className={`w-full rounded-md border overflow-hidden transition-all duration-300 ${
+                isSuccess
+                  ? "border-[rgba(34,197,94,0.3)] bg-[#06080F]"
+                  : "border-[rgba(255,255,255,0.1)] bg-[#06080F]"
+              }`}
+                style={{ boxShadow: isSuccess ? "0 0 30px rgba(34,197,94,0.08)" : "0 4px 24px rgba(0,0,0,0.3)" }}
+              >
+
+                {/* ── Recipient Header ── */}
+                <div className={`px-6 pt-7 pb-5 text-center border-b transition-all duration-300 ${
+                  isSuccess ? "border-[rgba(34,197,94,0.15)]" : "border-[rgba(255,255,255,0.06)]"
+                }`}>
+                  <div className="flex flex-col items-center gap-3">
+                    <div className={`p-3 rounded-sm transition-colors duration-300 ${
+                      isSuccess ? "bg-[rgba(34,197,94,0.08)]" : "bg-[rgba(0,255,65,0.04)]"
+                    }`}>
+                      <DustLogo size={28} color={isSuccess ? "#22c55e" : "#00FF41"} />
                     </div>
-                    <span style={{ fontSize: "22px", fontWeight: 700, color: isSuccess ? "#22C55E" : colors.accent.indigoBright, transition: "color 0.3s ease" }}>
-                      {fullName}
-                    </span>
-                    <span style={{ fontSize: "13px", color: colors.text.muted }}>
-                      {isSuccess ? "Private payment completed" : "Send a private payment"}
-                    </span>
+                    <div className="flex flex-col items-center gap-1">
+                      <span className={`text-xl font-bold font-mono tracking-tight transition-colors duration-300 ${
+                        isSuccess ? "text-green-400" : "text-[#00FF41]"
+                      }`}>
+                        {fullName}
+                      </span>
+                      <span className="text-[11px] text-[rgba(255,255,255,0.35)] font-mono">
+                        {isSuccess ? "Private payment completed" : "Send a private payment"}
+                      </span>
+                    </div>
                   </div>
                 </div>
 
-                {/* Tab switcher — hidden on success */}
+                {/* ── Tab Switcher ── */}
                 {!isSuccess && (
-                  <div style={{ display: "flex", gap: 0, borderBottom: `1px solid ${colors.border.default}` }}>
-                    <button
-                      style={{
-                        flex: 1, padding: "14px", textAlign: "center", cursor: "pointer",
-                        borderBottom: activeTab === "wallet" ? "2px solid #00FF41" : "2px solid transparent",
-                        transition: "all 0.2s ease", background: "none", border: "none",
-                        borderBottomWidth: "2px", borderBottomStyle: "solid",
-                        borderBottomColor: activeTab === "wallet" ? "#00FF41" : "transparent",
-                      }}
-                      onClick={() => setActiveTab("wallet")}
-                    >
-                      <div style={{ display: "flex", gap: "6px", justifyContent: "center", alignItems: "center" }}>
-                        <WalletIcon size={14} color={activeTab === "wallet" ? colors.accent.indigo : colors.text.muted} />
-                        <span style={{ fontSize: "13px", fontWeight: activeTab === "wallet" ? 700 : 500, color: activeTab === "wallet" ? colors.accent.indigo : colors.text.muted, transition: "color 0.2s ease" }}>
-                          Send with Wallet
-                        </span>
-                      </div>
-                    </button>
-                    <button
-                      style={{
-                        flex: 1, padding: "14px", textAlign: "center", cursor: "pointer",
-                        background: "none", border: "none",
-                        borderBottomWidth: "2px", borderBottomStyle: "solid",
-                        borderBottomColor: activeTab === "qr" ? "#00FF41" : "transparent",
-                        transition: "all 0.2s ease",
-                      }}
-                      onClick={() => setActiveTab("qr")}
-                    >
-                      <div style={{ display: "flex", gap: "6px", justifyContent: "center", alignItems: "center" }}>
-                        <CopyIcon size={14} color={activeTab === "qr" ? colors.accent.indigo : colors.text.muted} />
-                        <span style={{ fontSize: "13px", fontWeight: activeTab === "qr" ? 700 : 500, color: activeTab === "qr" ? colors.accent.indigo : colors.text.muted, transition: "color 0.2s ease" }}>
-                          QR / Address
-                        </span>
-                      </div>
-                    </button>
+                  <div className="flex border-b border-[rgba(255,255,255,0.06)]">
+                    {([
+                      ["wallet", WalletIcon, "WALLET"],
+                      ["qr", CopyIcon, "QR / ADDRESS"],
+                    ] as const).map(([tab, Icon, label]) => {
+                      const active = activeTab === tab;
+                      return (
+                        <button
+                          key={tab}
+                          onClick={() => setActiveTab(tab as "wallet" | "qr")}
+                          className={`flex-1 py-3 flex items-center justify-center gap-1.5 border-b-2 transition-all font-mono text-[10px] tracking-wider ${
+                            active
+                              ? "text-[#00FF41] border-[#00FF41]"
+                              : "text-[rgba(255,255,255,0.35)] border-transparent hover:text-[rgba(255,255,255,0.5)]"
+                          }`}
+                        >
+                          <Icon size={12} color={active ? "#00FF41" : "rgba(255,255,255,0.35)"} />
+                          <span>{label}</span>
+                        </button>
+                      );
+                    })}
                   </div>
                 )}
 
-                {/* Tab content */}
-                <div style={{ padding: "24px" }}>
+                {/* ── Tab Content ── */}
+                <div className="p-6">
                   {isSuccess ? (
-                    /* ====== SUCCESS STATE ====== */
-                    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "20px", paddingTop: "8px", paddingBottom: "8px" }}>
-                      {/* Confetti particles */}
-                      <div style={{ position: "relative", width: "80px", height: "80px" }}>
-                        {[
-                          { color: "#00FF41", x: -20, y: -10, delay: "0s", size: 6 },
-                          { color: "#7C3AED", x: 25, y: -15, delay: "0.1s", size: 5 },
-                          { color: "#22C55E", x: -30, y: 5, delay: "0.2s", size: 7 },
-                          { color: "#D97706", x: 30, y: 0, delay: "0.15s", size: 4 },
-                          { color: "#E53E3E", x: -10, y: -25, delay: "0.25s", size: 5 },
-                          { color: "#0891B2", x: 15, y: -20, delay: "0.05s", size: 6 },
-                        ].map((p, i) => (
-                          <div key={i} style={{
-                            position: "absolute", left: `calc(50% + ${p.x}px)`, top: `calc(50% + ${p.y}px)`,
-                            width: `${p.size}px`, height: `${p.size}px`, borderRadius: "50%", backgroundColor: p.color,
-                            animation: `dust-confetti 1.2s ease-out ${p.delay} forwards`,
-                          }} />
-                        ))}
-
-                        {/* Check circle */}
-                        <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", animation: "dust-success-scale 0.5s ease-out forwards" }}>
-                          <div style={{
-                            width: "72px", height: "72px", borderRadius: "50%",
-                            background: "linear-gradient(135deg, #22C55E, #16A34A)", display: "flex",
-                            alignItems: "center", justifyContent: "center",
-                            boxShadow: "0 8px 24px rgba(34, 197, 94, 0.3)",
-                          }}>
-                            <svg width="36" height="36" viewBox="0 0 24 24" fill="none" strokeLinecap="round" strokeLinejoin="round">
-                              <path d="M20 6L9 17l-5-5" stroke="white" strokeWidth="2.5"
-                                strokeDasharray="24" strokeDashoffset="24"
-                                style={{ animation: "dust-check-draw 0.4s ease-out 0.3s forwards" }} />
-                            </svg>
-                          </div>
-                        </div>
-                      </div>
-
-                      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "6px", animation: "dust-fade-up 0.4s ease-out 0.2s both" }}>
-                        <span style={{ fontSize: "22px", fontWeight: 700, color: colors.text.primary }}>
-                          Payment Sent!
-                        </span>
-                        <div style={{ display: "flex", gap: "6px", alignItems: "baseline" }}>
-                          <span style={{ fontSize: "28px", fontWeight: 700, color: colors.text.primary, fontFamily: "'JetBrains Mono', monospace" }}>
-                            {amount}
-                          </span>
-                          <span style={{ fontSize: "16px", fontWeight: 500, color: colors.text.muted }}>{chainConfig.nativeCurrency.symbol}</span>
-                        </div>
-                        <span style={{ fontSize: "14px", color: colors.text.muted }}>
-                          sent to <span style={{ color: colors.accent.indigoBright, fontWeight: 600 }}>{fullName}</span>
-                        </span>
-                      </div>
-
-                      {/* Explorer link */}
-                      {sendTxHash && (
-                        <div style={{ animation: "dust-fade-up 0.4s ease-out 0.5s both" }}>
-                          <a href={`${getExplorerBase(chainId)}/tx/${sendTxHash}`} target="_blank" rel="noopener noreferrer">
-                            <div style={{ display: "flex", gap: "6px", alignItems: "center", padding: "10px 16px", backgroundColor: colors.bg.input, borderRadius: radius.sm, border: `1px solid ${colors.border.default}`, cursor: "pointer" }}>
-                              <ArrowUpRightIcon size={13} color={colors.accent.indigo} />
-                              <span style={{ fontSize: "13px", color: colors.accent.indigo, fontWeight: 500 }}>View on Explorer</span>
-                            </div>
-                          </a>
-                        </div>
-                      )}
-
-                      {/* Send another */}
-                      <span
-                        style={{ fontSize: "13px", color: colors.text.muted, cursor: "pointer", animation: "dust-fade-up 0.4s ease-out 0.6s both" }}
-                        onClick={() => { setSendStep("input"); setAmount(""); setSendTxHash(null); }}
-                      >
-                        Send another payment
-                      </span>
-                    </div>
+                    <SuccessView
+                      amount={amount}
+                      symbol={displaySymbol}
+                      fullName={fullName}
+                      chainId={selectedChainId}
+                      txHash={sendTxHash}
+                      onSendAnother={resetPayment}
+                    />
                   ) : activeTab === "wallet" ? (
-                    /* ====== WALLET TAB ====== */
                     <>
                       {metaResolving ? (
-                        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "12px", paddingTop: "24px", paddingBottom: "24px" }}>
-                          <div style={{ width: "24px", height: "24px", border: `2px solid ${colors.accent.indigo}`, borderTopColor: "transparent", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
-                          <span style={{ fontSize: "13px", color: colors.text.muted }}>Preparing payment...</span>
+                        <div className="flex flex-col items-center gap-3 py-8">
+                          <div className="w-5 h-5 border-2 border-[#00FF41] border-t-transparent rounded-full animate-spin" />
+                          <span className="text-[11px] text-[rgba(255,255,255,0.35)] font-mono">Preparing payment...</span>
+                        </div>
+                      ) : resolveError ? (
+                        <div className="flex flex-col items-center gap-3 py-8">
+                          <AlertCircleIcon size={20} color="#ef4444" />
+                          <span className="text-xs text-[#ef4444] font-mono">Could not resolve {fullName}</span>
+                          <button
+                            onClick={() => { setResolveError(false); setResolvedMeta(null); }}
+                            className="text-[11px] text-[#00FF41] font-mono underline cursor-pointer bg-transparent border-none"
+                          >
+                            Retry
+                          </button>
                         </div>
                       ) : !isConnected ? (
-                        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "20px", paddingTop: "16px", paddingBottom: "16px" }}>
-                          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "6px" }}>
-                            <span style={{ fontSize: "15px", fontWeight: 600, color: colors.text.primary }}>
-                              Connect to send
-                            </span>
-                            <span style={{ fontSize: "13px", color: colors.text.muted, textAlign: "center" }}>
+                        <div className="flex flex-col items-center gap-5 py-4">
+                          <div className="flex flex-col items-center gap-1.5">
+                            <span className="text-sm font-bold text-white font-mono">Connect to send</span>
+                            <span className="text-[11px] text-[rgba(255,255,255,0.35)] font-mono text-center">
                               Connect your wallet to send a private payment
                             </span>
                           </div>
                           <button
-                            style={{
-                              width: "100%", padding: "14px",
-                              background: buttonVariants.primary.bg,
-                              borderRadius: radius.sm, cursor: "pointer",
-                              boxShadow: buttonVariants.primary.boxShadow,
-                              border: "none", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px",
-                            }}
                             onClick={() => connect({ connector: injected() })}
+                            className="w-full py-3 rounded-sm border border-[#00FF41]/30 bg-[#00FF41]/[0.05] text-[#00FF41] font-mono text-xs font-semibold tracking-wider flex items-center justify-center gap-2 cursor-pointer hover:border-[#00FF41] hover:bg-[#00FF41]/[0.1] transition-all"
+                            style={{ boxShadow: "0 0 12px rgba(0,255,65,0.05)" }}
                           >
-                            <WalletIcon size={16} color="#06080F" />
-                            <span style={{ fontSize: "14px", color: "#06080F", fontWeight: 600 }}>Connect Wallet</span>
+                            <WalletIcon size={14} color="#00FF41" />
+                            CONNECT WALLET
                           </button>
-                          <span style={{ fontSize: "11px", color: colors.text.muted, textAlign: "center" }}>
-                            Or switch to <span style={{ color: colors.accent.indigo, cursor: "pointer", fontWeight: 500 }} onClick={() => setActiveTab("qr")}>QR / Address</span> to send from any wallet
+                          <span className="text-[10px] text-[rgba(255,255,255,0.25)] font-mono text-center">
+                            Or switch to{" "}
+                            <span
+                              className="text-[#00FF41] cursor-pointer hover:underline"
+                              onClick={() => setActiveTab("qr")}
+                            >
+                              QR / Address
+                            </span>{" "}
+                            to send from any wallet
                           </span>
                         </div>
                       ) : sendStep === "input" ? (
-                        <div style={{ display: "flex", flexDirection: "column", gap: "18px" }}>
+                        <div className="flex flex-col gap-4">
+                          {/* Chain selector */}
                           <div>
-                            <span style={{ fontSize: "12px", color: colors.text.tertiary, display: "block", marginBottom: "8px", fontWeight: 600, letterSpacing: "0.04em", textTransform: "uppercase" }}>Amount</span>
-                            <div style={{ position: "relative" }}>
-                              <input
-                                placeholder="0.0" type="number" step="0.001" value={amount}
-                                onChange={(e: ChangeEvent<HTMLInputElement>) => setAmount(e.target.value)}
-                                style={{
-                                  width: "100%", height: "64px", backgroundColor: colors.bg.input,
-                                  border: `1.5px solid ${colors.border.default}`, borderRadius: radius.md,
-                                  color: colors.text.primary, fontSize: "28px", fontWeight: 600,
-                                  fontFamily: "'JetBrains Mono', monospace", padding: "0 60px 0 16px",
-                                  outline: "none", boxSizing: "border-box",
-                                }}
-                              />
-                              <span style={{ position: "absolute", right: "16px", top: "50%", transform: "translateY(-50%)", fontSize: "14px", fontWeight: 600, color: colors.text.muted }}>
-                                {chainConfig.nativeCurrency.symbol}
-                              </span>
-                            </div>
-                            <span style={{ fontSize: "11px", color: colors.text.muted, marginTop: "6px", display: "block" }}>on {chainConfig.name}</span>
+                            <label className="text-[9px] text-[rgba(255,255,255,0.5)] uppercase tracking-wider font-mono block mb-1.5">
+                              Network
+                            </label>
+                            <PayChainSelector
+                              selectedChainId={selectedChainId}
+                              onChange={handleChainChange}
+                            />
                           </div>
 
+                          {/* Amount + Token */}
+                          <div>
+                            <label className="text-[9px] text-[rgba(255,255,255,0.5)] uppercase tracking-wider font-mono block mb-1.5">
+                              Amount
+                            </label>
+                            <div className="flex gap-2 items-center">
+                              <input
+                                placeholder="0.0"
+                                type="number"
+                                step="any"
+                                min="0"
+                                value={amount}
+                                onKeyDown={(e) => { if (["-", "e", "E", "+"].includes(e.key)) e.preventDefault(); }}
+                                onChange={(e: ChangeEvent<HTMLInputElement>) => {
+                                  const v = e.target.value;
+                                  if (v === "" || parseFloat(v) >= 0) setAmount(v);
+                                }}
+                                className="flex-1 py-2.5 px-3 rounded-sm bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.1)] text-white font-mono text-sm font-semibold focus:outline-none focus:border-[#00FF41] focus:bg-[rgba(0,255,65,0.02)] placeholder-[rgba(255,255,255,0.2)] transition-all"
+                              />
+                              <PayTokenSelector
+                                  chainId={selectedChainId}
+                                  selectedToken={selectedToken}
+                                  onChange={setSelectedToken}
+                                />
+                            </div>
+                          </div>
+
+                          {/* Preview button */}
                           <button
-                            style={{
-                              width: "100%", height: "52px",
-                              background: amount ? buttonVariants.primary.bg : colors.bg.elevated,
-                              borderRadius: radius.md, display: "flex", alignItems: "center", justifyContent: "center", gap: "8px",
-                              cursor: amount && resolvedMeta ? "pointer" : "not-allowed",
-                              opacity: amount && resolvedMeta && !isLoading ? 1 : 0.5,
-                              boxShadow: amount ? buttonVariants.primary.boxShadow : "none",
-                              border: "none",
-                            }}
                             onClick={handlePreview}
+                            disabled={!amount || !resolvedMeta || isLoading}
+                            className={`w-full py-3 rounded-sm font-mono text-xs font-semibold tracking-wider flex items-center justify-center gap-2 transition-all ${
+                              amount && resolvedMeta && !isLoading
+                                ? "border border-[rgba(0,255,65,0.2)] bg-[rgba(0,255,65,0.1)] text-[#00FF41] cursor-pointer hover:bg-[rgba(0,255,65,0.15)] hover:border-[#00FF41] hover:shadow-[0_0_15px_rgba(0,255,65,0.15)]"
+                                : "border border-[rgba(255,255,255,0.06)] bg-[rgba(255,255,255,0.02)] text-[rgba(255,255,255,0.3)] cursor-not-allowed"
+                            }`}
                           >
-                            <span style={{ fontSize: "15px", fontWeight: 600, color: amount ? "#06080F" : colors.text.muted }}>
-                              Preview Payment
-                            </span>
+                            PREVIEW PAYMENT
                           </button>
                         </div>
                       ) : (
-                        /* Confirm state */
-                        <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
-                          <div style={{ padding: "20px", backgroundColor: colors.bg.input, borderRadius: radius.md, border: `1px solid ${colors.border.default}` }}>
-                            <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
-                              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                                <span style={{ fontSize: "13px", color: colors.text.muted }}>Amount</span>
-                                <span style={{ fontSize: "20px", fontWeight: 700, color: colors.text.primary, fontFamily: "'JetBrains Mono', monospace" }}>{amount} {chainConfig.nativeCurrency.symbol}</span>
-                              </div>
-                              <div style={{ height: "1px", backgroundColor: colors.border.default }} />
-                              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                                <span style={{ fontSize: "13px", color: colors.text.muted }}>To</span>
-                                <span style={{ fontSize: "16px", fontWeight: 600, color: colors.accent.indigoBright }}>{fullName}</span>
-                              </div>
-                              <div style={{ height: "1px", backgroundColor: colors.border.default }} />
-                              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                                <span style={{ fontSize: "13px", color: colors.text.muted }}>Network fee</span>
-                                <span style={{ fontSize: "13px", fontWeight: 600, color: "#22C55E" }}>Free (sponsored)</span>
-                              </div>
-                            </div>
-                          </div>
-
-                          <div style={{ display: "flex", gap: "8px", alignItems: "center", padding: "12px 14px", backgroundColor: "rgba(43, 90, 226, 0.04)", borderRadius: radius.sm, border: "1px solid rgba(43, 90, 226, 0.1)" }}>
-                            <LockIcon size={14} color={colors.accent.indigo} />
-                            <span style={{ fontSize: "12px", color: colors.text.tertiary }}>
-                              This payment uses a stealth address. It cannot be linked to {fullName}.
-                            </span>
-                          </div>
-
-                          <div style={{ display: "flex", gap: "10px" }}>
-                            <button
-                              style={{
-                                flex: 1, height: "48px", background: buttonVariants.secondary.bg, borderRadius: radius.sm,
-                                border: buttonVariants.secondary.border, display: "flex", alignItems: "center",
-                                justifyContent: "center", cursor: "pointer",
-                              }}
-                              onClick={() => setSendStep("input")}
-                            >
-                              <span style={{ fontSize: "14px", fontWeight: 500, color: colors.text.secondary }}>Back</span>
-                            </button>
-                            <button
-                              style={{
-                                flex: 2, height: "48px",
-                                background: buttonVariants.primary.bg,
-                                borderRadius: radius.sm, display: "flex", alignItems: "center", justifyContent: "center", gap: "8px",
-                                cursor: isLoading ? "wait" : "pointer",
-                                boxShadow: buttonVariants.primary.boxShadow,
-                                border: "none",
-                              }}
-                              onClick={handleSend}
-                            >
-                              {isLoading ? (
-                                <div style={{ width: "16px", height: "16px", border: "2px solid #06080F", borderTopColor: "transparent", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
-                              ) : (
-                                <>
-                                  <SendIcon size={15} color="#06080F" />
-                                  <span style={{ fontSize: "14px", fontWeight: 600, color: "#06080F" }}>Send Payment</span>
-                                </>
-                              )}
-                            </button>
-                          </div>
-                        </div>
+                        <ConfirmView
+                          amount={amount}
+                          symbol={displaySymbol}
+                          fullName={fullName}
+                          chainName={chainConfig.name}
+                          chainId={selectedChainId}
+                          isNativeToken={isNativeToken}
+                          isLoading={isLoading}
+                          chainMismatch={chainMismatch}
+                          onBack={() => setSendStep("input")}
+                          onSend={handleSend}
+                        />
                       )}
 
                       {sendError && (
-                        <div style={{ display: "flex", gap: "6px", alignItems: "center", padding: "12px 14px", background: buttonVariants.danger.bg, border: buttonVariants.danger.border, borderRadius: radius.xs, marginTop: "12px" }}>
-                          <AlertCircleIcon size={14} color={colors.accent.red} />
-                          <span style={{ fontSize: "12px", color: colors.accent.red }}>{sendError}</span>
+                        <div className="flex gap-2 items-center p-3 mt-3 rounded-sm bg-[rgba(239,68,68,0.06)] border border-[rgba(239,68,68,0.2)]">
+                          <AlertCircleIcon size={13} color="#ef4444" />
+                          <span className="text-[11px] text-[#ef4444] font-mono">{sendError}</span>
                         </div>
                       )}
                     </>
                   ) : (
-                    /* ====== QR TAB ====== */
-                    <NoOptInPayment
-                      recipientName={name}
-                      displayName={fullName}
-                    />
+                    <NoOptInPayment recipientName={name} displayName={fullName} />
                   )}
                 </div>
               </div>
             </div>
 
-            {/* Pay someone else */}
-            <div style={{ display: "flex", justifyContent: "center", paddingTop: "4px" }}>
-              <Link href="/" style={{ textDecoration: "none" }}>
-                <span style={{ fontSize: "13px", color: colors.text.muted, fontWeight: 500, cursor: "pointer" }}>
+            {/* ── Footer ── */}
+            <div className="flex justify-center pt-1">
+              <Link href="/" className="no-underline">
+                <span className="text-[11px] text-[rgba(255,255,255,0.25)] font-mono cursor-pointer hover:text-[rgba(255,255,255,0.5)] transition-colors">
                   Pay someone else
                 </span>
               </Link>
@@ -442,6 +516,151 @@ export default function PayPageClient({ name }: { name: string }) {
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+// ─── Confirm View ────────────────────────────────────────────────────────────
+
+function ConfirmView({
+  amount, symbol, fullName, chainName, chainId, isNativeToken,
+  isLoading, chainMismatch, onBack, onSend,
+}: {
+  amount: string; symbol: string; fullName: string; chainName: string;
+  chainId: number; isNativeToken: boolean;
+  isLoading: boolean; chainMismatch: boolean;
+  onBack: () => void; onSend: () => void;
+}) {
+  return (
+    <div className="flex flex-col gap-4">
+      {/* Summary */}
+      <div className="p-4 rounded-sm bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.06)]">
+        <div className="flex flex-col gap-3">
+          <div className="flex justify-between items-center">
+            <span className="text-[10px] text-[rgba(255,255,255,0.4)] font-mono uppercase tracking-wider">Amount</span>
+            <span className="text-lg font-bold text-white font-mono">{amount} {symbol}</span>
+          </div>
+          <div className="h-px bg-[rgba(255,255,255,0.06)]" />
+          <div className="flex justify-between items-center">
+            <span className="text-[10px] text-[rgba(255,255,255,0.4)] font-mono uppercase tracking-wider">To</span>
+            <span className="text-sm font-semibold text-[#00FF41] font-mono">{fullName}</span>
+          </div>
+          <div className="h-px bg-[rgba(255,255,255,0.06)]" />
+          <div className="flex justify-between items-center">
+            <span className="text-[10px] text-[rgba(255,255,255,0.4)] font-mono uppercase tracking-wider">Network</span>
+            <div className="flex items-center gap-1.5">
+              <ChainIcon size={12} chainId={chainId} />
+              <span className="text-xs text-[rgba(255,255,255,0.6)] font-mono">{chainName}</span>
+            </div>
+          </div>
+          <div className="h-px bg-[rgba(255,255,255,0.06)]" />
+          <div className="flex justify-between items-center">
+            <span className="text-[10px] text-[rgba(255,255,255,0.4)] font-mono uppercase tracking-wider">Fee</span>
+            <span className="text-xs font-semibold text-green-400 font-mono">
+              {isNativeToken ? "FREE (SPONSORED)" : "GAS ONLY"}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* Privacy note */}
+      <div className="flex gap-2 items-center p-3 rounded-sm bg-[rgba(0,255,65,0.03)] border border-[rgba(0,255,65,0.08)]">
+        <LockIcon size={12} color="#00FF41" />
+        <span className="text-[10px] text-[rgba(255,255,255,0.35)] font-mono">
+          Stealth address — cannot be linked to {fullName}
+        </span>
+      </div>
+
+      {/* Buttons */}
+      <div className="flex gap-2">
+        <button
+          onClick={onBack}
+          className="flex-1 py-3 rounded-sm border border-[rgba(255,255,255,0.08)] bg-transparent text-[rgba(255,255,255,0.5)] font-mono text-[11px] tracking-wider cursor-pointer hover:border-[rgba(255,255,255,0.2)] hover:text-[rgba(255,255,255,0.7)] transition-all"
+        >
+          BACK
+        </button>
+        <button
+          onClick={onSend}
+          disabled={isLoading || chainMismatch}
+          className={`flex-[2] py-3 rounded-sm font-mono text-[11px] tracking-wider flex items-center justify-center gap-2 transition-all ${
+            isLoading || chainMismatch
+              ? "border border-[rgba(255,255,255,0.06)] bg-[rgba(255,255,255,0.02)] text-[rgba(255,255,255,0.3)] cursor-wait"
+              : "border border-[rgba(0,255,65,0.2)] bg-[rgba(0,255,65,0.1)] text-[#00FF41] cursor-pointer hover:bg-[rgba(0,255,65,0.15)] hover:border-[#00FF41] hover:shadow-[0_0_15px_rgba(0,255,65,0.15)]"
+          }`}
+        >
+          {isLoading ? (
+            <div className="w-3.5 h-3.5 border-2 border-[#00FF41] border-t-transparent rounded-full animate-spin" />
+          ) : chainMismatch ? (
+            <span>SWITCH TO {chainName.toUpperCase()}</span>
+          ) : (
+            <>
+              <SendIcon size={13} color="#00FF41" />
+              <span>SEND PAYMENT</span>
+            </>
+          )}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ─── Success View ────────────────────────────────────────────────────────────
+
+function SuccessView({
+  amount, symbol, fullName, chainId, txHash, onSendAnother,
+}: {
+  amount: string; symbol: string; fullName: string;
+  chainId: number; txHash: string | null; onSendAnother: () => void;
+}) {
+  const chainConfig = getChainConfig(chainId);
+
+  return (
+    <div className="flex flex-col items-center gap-5 py-4">
+      {/* Check icon */}
+      <div className="w-16 h-16 rounded-sm bg-[rgba(34,197,94,0.08)] border border-[rgba(34,197,94,0.2)] flex items-center justify-center">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M20 6L9 17l-5-5" stroke="#22c55e" strokeWidth="2.5" />
+        </svg>
+      </div>
+
+      {/* Info */}
+      <div className="flex flex-col items-center gap-2">
+        <span className="text-sm font-bold text-white font-mono tracking-wider">PAYMENT SENT</span>
+        <div className="flex items-baseline gap-2">
+          <span className="text-[28px] font-extrabold text-white font-mono">{amount}</span>
+          <span className="text-base font-medium text-[rgba(255,255,255,0.4)]">{symbol}</span>
+        </div>
+        <span className="text-xs text-[rgba(255,255,255,0.4)] font-mono">
+          sent to <span className="text-[#00FF41] font-semibold">{fullName}</span>
+        </span>
+        <div className="flex items-center gap-1.5 mt-0.5">
+          <ChainIcon size={11} chainId={chainId} />
+          <span className="text-[10px] text-[rgba(255,255,255,0.3)] font-mono">{chainConfig.name}</span>
+        </div>
+      </div>
+
+      {/* Explorer link */}
+      {txHash && (
+        <a
+          href={`${getExplorerBase(chainId)}/tx/${txHash}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="no-underline"
+        >
+          <div className="flex gap-1.5 items-center px-3 py-2 rounded-sm border border-[rgba(255,255,255,0.08)] bg-[rgba(255,255,255,0.02)] hover:border-[rgba(0,255,65,0.2)] transition-all cursor-pointer">
+            <ArrowUpRightIcon size={11} color="#00FF41" />
+            <span className="text-[11px] text-[#00FF41] font-mono font-medium">View on Explorer</span>
+          </div>
+        </a>
+      )}
+
+      {/* Send another */}
+      <button
+        onClick={onSendAnother}
+        className="text-[10px] text-[rgba(255,255,255,0.25)] font-mono cursor-pointer bg-transparent border-none hover:text-[rgba(255,255,255,0.5)] transition-colors"
+      >
+        Send another payment
+      </button>
     </div>
   );
 }
