@@ -230,42 +230,31 @@ export default function PayPageClient({ name }: { name: string }) {
 
   const fullName = formatName(name);
 
-  const retryCountRef = useRef(0);
-
   const doResolve = useCallback(async (force = false) => {
-    if ((!force && resolvedMeta) || resolvingRef.current || !isConfigured) return;
+    if ((!force && resolvedMeta) || resolvingRef.current) return;
     resolvingRef.current = true;
     setMetaResolving(true);
     setResolveError(false);
     try {
-      const resolved = await resolveName(name + NAME_SUFFIX);
-      if (resolved) {
-        setResolvedMeta(`st:eth:${resolved}`);
-        retryCountRef.current = 0;
-      } else {
-        const resolved2 = await resolveName(name);
-        if (resolved2) {
-          setResolvedMeta(`st:thanos:${resolved2}`);
-          retryCountRef.current = 0;
-        } else {
-          // Auto-retry once on initial load (RPC timeout)
-          if (!force && retryCountRef.current < 1) {
-            retryCountRef.current++;
-            resolvingRef.current = false;
-            await new Promise((r) => setTimeout(r, 2000));
-            return doResolve(true);
-          }
-          setResolveError(true);
+      // Server-side resolution avoids browser RPC timeouts
+      const res = await fetch(`/api/resolve-meta/${encodeURIComponent(name)}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.metaAddress) {
+          setResolvedMeta(`st:eth:${data.metaAddress}`);
+          return;
         }
       }
+      // Fallback: try client-side resolution if server fails
+      if (isConfigured) {
+        const resolved = await resolveName(name + NAME_SUFFIX);
+        if (resolved) { setResolvedMeta(`st:eth:${resolved}`); return; }
+        const resolved2 = await resolveName(name);
+        if (resolved2) { setResolvedMeta(`st:thanos:${resolved2}`); return; }
+      }
+      setResolveError(true);
     } catch (e) {
       console.error('[pay] Name resolution failed:', e);
-      if (!force && retryCountRef.current < 1) {
-        retryCountRef.current++;
-        resolvingRef.current = false;
-        await new Promise((r) => setTimeout(r, 2000));
-        return doResolve(true);
-      }
       setResolveError(true);
     } finally {
       resolvingRef.current = false;
