@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useCallback, useRef, useMemo, type ChangeEvent } from "react";
-import { useAccount, useConnect, useChainId } from "wagmi";
+import { useAccount, useConnect, useChainId, useSwitchChain } from "wagmi";
 import { injected } from "wagmi/connectors";
 import { getExplorerBase } from "@/lib/design/tokens";
 import { useStealthSend, useStealthName } from "@/hooks/stealth";
@@ -191,11 +191,13 @@ export default function PayPageClient({ name }: { name: string }) {
   const { isConnected } = useAccount();
   const { connect } = useConnect();
   const walletChainId = useChainId();
+  const { switchChain } = useSwitchChain();
   const { resolveName, formatName, isConfigured } = useStealthName();
 
   // Cross-chain state
   const [selectedChainId, setSelectedChainId] = useState(DEFAULT_CHAIN_ID);
   const [selectedToken, setSelectedToken] = useState(NATIVE_TOKEN_ADDRESS);
+  const [isSwitching, setIsSwitching] = useState(false);
   const chainConfig = getChainConfig(selectedChainId);
   const chainMismatch = isConnected && walletChainId !== selectedChainId;
 
@@ -268,6 +270,17 @@ export default function PayPageClient({ name }: { name: string }) {
     if (!resolvedMeta || !amount) return;
     if (generateAddressFor(resolvedMeta)) setSendStep("confirm");
   };
+
+  const handleSwitchChain = useCallback(async () => {
+    setIsSwitching(true);
+    try {
+      await switchChain({ chainId: selectedChainId });
+    } catch (e) {
+      console.error('[pay] Chain switch failed:', e);
+    } finally {
+      setIsSwitching(false);
+    }
+  }, [switchChain, selectedChainId]);
 
   const handleSend = async () => {
     if (!resolvedMeta) return;
@@ -494,9 +507,11 @@ export default function PayPageClient({ name }: { name: string }) {
                           chainId={selectedChainId}
                           isNativeToken={isNativeToken}
                           isLoading={isLoading}
+                          isSwitching={isSwitching}
                           chainMismatch={chainMismatch}
                           onBack={() => setSendStep("input")}
                           onSend={handleSend}
+                          onSwitchChain={handleSwitchChain}
                         />
                       )}
 
@@ -533,12 +548,12 @@ export default function PayPageClient({ name }: { name: string }) {
 
 function ConfirmView({
   amount, symbol, fullName, chainName, chainId, isNativeToken,
-  isLoading, chainMismatch, onBack, onSend,
+  isLoading, isSwitching, chainMismatch, onBack, onSend, onSwitchChain,
 }: {
   amount: string; symbol: string; fullName: string; chainName: string;
   chainId: number; isNativeToken: boolean;
-  isLoading: boolean; chainMismatch: boolean;
-  onBack: () => void; onSend: () => void;
+  isLoading: boolean; isSwitching: boolean; chainMismatch: boolean;
+  onBack: () => void; onSend: () => void; onSwitchChain: () => void;
 }) {
   return (
     <div className="flex flex-col gap-4">
@@ -589,15 +604,17 @@ function ConfirmView({
           BACK
         </button>
         <button
-          onClick={onSend}
-          disabled={isLoading || chainMismatch}
+          onClick={chainMismatch ? onSwitchChain : onSend}
+          disabled={isLoading || isSwitching}
           className={`flex-[2] py-3 rounded-sm font-mono text-[11px] tracking-wider flex items-center justify-center gap-2 transition-all ${
-            isLoading || chainMismatch
+            isLoading || isSwitching
               ? "border border-[rgba(255,255,255,0.06)] bg-[rgba(255,255,255,0.02)] text-[rgba(255,255,255,0.3)] cursor-wait"
-              : "border border-[rgba(0,255,65,0.2)] bg-[rgba(0,255,65,0.1)] text-[#00FF41] cursor-pointer hover:bg-[rgba(0,255,65,0.15)] hover:border-[#00FF41] hover:shadow-[0_0_15px_rgba(0,255,65,0.15)]"
+              : chainMismatch
+                ? "border border-[rgba(255,200,0,0.3)] bg-[rgba(255,200,0,0.06)] text-[#FFC800] cursor-pointer hover:bg-[rgba(255,200,0,0.1)] hover:border-[#FFC800]"
+                : "border border-[rgba(0,255,65,0.2)] bg-[rgba(0,255,65,0.1)] text-[#00FF41] cursor-pointer hover:bg-[rgba(0,255,65,0.15)] hover:border-[#00FF41] hover:shadow-[0_0_15px_rgba(0,255,65,0.15)]"
           }`}
         >
-          {isLoading ? (
+          {isLoading || isSwitching ? (
             <div className="w-3.5 h-3.5 border-2 border-[#00FF41] border-t-transparent rounded-full animate-spin" />
           ) : chainMismatch ? (
             <span>SWITCH TO {chainName.toUpperCase()}</span>
