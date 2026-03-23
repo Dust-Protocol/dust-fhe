@@ -57,6 +57,10 @@ async function registerOnChain(
     // Manual gas limit prevents UNPREDICTABLE_GAS_LIMIT when RPC estimation fails transiently
     const tx = await registry.registerName(stripped, metaBytes, { gasLimit: 300_000 });
     const receipt = await tx.wait();
+    if (receipt.status === 0) {
+      console.error(`[SponsorNameRegister] Registration tx reverted for "${stripped}" on chain ${chainId}`);
+      return null;
+    }
     console.log(`[SponsorNameRegister] Registered "${stripped}" on ${config.name}, tx: ${receipt.transactionHash}`);
 
     // Auto-transfer ownership to the user so getNamesOwnedBy(userAddress) works
@@ -102,6 +106,10 @@ async function registerOnCanonicalMerkle(
 
     const tx = await merkleRegistry.registerName(stripped, metaBytes);
     const receipt = await tx.wait();
+    if (receipt.status === 0) {
+      console.error(`[SponsorNameRegister] Canonical Merkle tx reverted for "${stripped}"`);
+      return null;
+    }
     console.log(`[SponsorNameRegister] Registered "${stripped}" on canonical Merkle registry, tx: ${receipt.transactionHash}`);
     return receipt.transactionHash;
   } catch (e) {

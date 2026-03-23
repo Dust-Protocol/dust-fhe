@@ -83,16 +83,17 @@ export async function POST(req: Request) {
       }
     }
 
-    // Fallback path: sponsor wallet sends tx — submit and return immediately
+    // Fallback path: sponsor wallet sends tx — await receipt to confirm success
     console.log('[SponsorAnnounce] Using sponsor wallet');
     const sponsor = getServerSponsor(chainId);
     const announcer = new ethers.Contract(announcerAddress, ANNOUNCER_ABI, sponsor);
     const tx = await announcer.announce(1, stealthAddress, ephemeralPubKey, metadata);
-    // Fire-and-forget wait — respond as soon as tx is submitted
-    tx.wait()
-      .then((receipt: ethers.ContractReceipt) => console.log('[SponsorAnnounce] sponsor wallet confirmed:', receipt.transactionHash))
-      .catch((err: unknown) => console.warn('[SponsorAnnounce] sponsor wallet wait failed (non-fatal):', err));
-    return NextResponse.json({ success: true, txHash: tx.hash }, { headers: { 'Cache-Control': 'no-store' } });
+    const receipt = await tx.wait();
+    if (receipt.status === 0) {
+      console.error('[SponsorAnnounce] Transaction reverted:', receipt.transactionHash);
+      return NextResponse.json({ error: 'Announcement transaction reverted' }, { status: 500, headers: { 'Cache-Control': 'no-store' } });
+    }
+    return NextResponse.json({ success: true, txHash: receipt.transactionHash }, { headers: { 'Cache-Control': 'no-store' } });
   } catch (e) {
     console.error('[SponsorAnnounce] Error:', e);
     return NextResponse.json({ error: 'Announcement failed' }, { status: 500 });

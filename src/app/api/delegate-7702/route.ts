@@ -109,6 +109,13 @@ export async function POST(req: Request) {
         gas: 200_000n,
       });
 
+      const { createPublicClient } = await import('viem');
+      const drainPubClient = createPublicClient({ chain: config.viemChain, transport: http(config.rpcUrl) });
+      const drainReceipt = await drainPubClient.waitForTransactionReceipt({ hash: txHash, timeout: 120_000 });
+      if (drainReceipt.status === 'reverted') {
+        return NextResponse.json({ error: 'Drain transaction reverted' }, { status: 500, headers: NO_STORE });
+      }
+
       console.log(`[7702] drain for ${stealthAddress} → tx: ${txHash}`);
 
       return NextResponse.json({ txHash }, { headers: NO_STORE });
@@ -136,6 +143,13 @@ export async function POST(req: Request) {
         gas: 200_000n,
       });
 
+      const { createPublicClient } = await import('viem');
+      const initPubClient = createPublicClient({ chain: config.viemChain, transport: http(config.rpcUrl) });
+      const initReceipt = await initPubClient.waitForTransactionReceipt({ hash: txHash, timeout: 120_000 });
+      if (initReceipt.status === 'reverted') {
+        return NextResponse.json({ error: 'Initialize transaction reverted' }, { status: 500, headers: NO_STORE });
+      }
+
       console.log(`[7702] initialize for ${stealthAddress} → tx: ${txHash}`);
 
       return NextResponse.json({ txHash }, { headers: NO_STORE });
@@ -152,7 +166,7 @@ export async function POST(req: Request) {
       }
 
       const provider = getServerProvider(chainId);
-      const balance = await provider.getBalance(stealthAddress);
+      let balance = await provider.getBalance(stealthAddress);
       if (balance.isZero()) {
         return NextResponse.json({ error: 'No funds in stealth address' }, { status: 400, headers: NO_STORE });
       }
@@ -198,10 +212,21 @@ export async function POST(req: Request) {
           chain: config.viemChain,
           transport: http(config.rpcUrl),
         });
-        await publicClient.waitForTransactionReceipt({
+        const initReceipt = await publicClient.waitForTransactionReceipt({
           hash: initTxHash,
           timeout: 120_000, // 120s for Sepolia testnet
         });
+        if (initReceipt.status === 'reverted') {
+          return NextResponse.json({ error: 'Initialization transaction reverted' }, { status: 500, headers: NO_STORE });
+        }
+
+        // Re-read balance after init tx consumed gas
+        const updatedBalance = await provider.getBalance(stealthAddress);
+        if (updatedBalance.isZero()) {
+          return NextResponse.json({ error: 'No funds remaining after initialization' }, { status: 400, headers: NO_STORE });
+        }
+
+        balance = updatedBalance;
       }
 
       // Step 2: Execute DustPool.deposit(commitment, balance) via the stealth account
@@ -246,6 +271,9 @@ export async function POST(req: Request) {
         hash: txHash,
         timeout: 120_000, // 120s for Sepolia testnet
       });
+      if (receipt.status === 'reverted') {
+        return NextResponse.json({ error: 'Deposit transaction reverted' }, { status: 500, headers: NO_STORE });
+      }
 
       const poolContract = new ethers.Contract(dustPoolAddress, DUST_POOL_ABI, provider);
       let leafIndex = 0;

@@ -76,6 +76,11 @@ export async function POST(req: Request) {
     const tx = await registry.registerKeysOnBehalf(registrant, 1, signature, metaBytes);
     const receipt = await tx.wait();
 
+    if (receipt.status === 0) {
+      console.error('[SponsorRegisterKeys] Transaction reverted:', receipt.transactionHash);
+      return NextResponse.json({ error: 'Transaction reverted' }, { status: 500, headers: NO_STORE });
+    }
+
     console.log('[SponsorRegisterKeys] Success:', receipt.transactionHash);
 
     return NextResponse.json({
