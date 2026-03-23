@@ -189,6 +189,23 @@ describe("FHEStealthTransfer", function () {
           )
       ).to.be.revertedWithCustomError(token, "NotApproved");
     });
+
+    it("should increment totalTransfers sequentially", async function () {
+      // #given — two separate stealth sends
+      const [enc1] = await encryptForStealth(alice, [SEND_AMOUNT]);
+      const [enc2] = await encryptForStealth(alice, [SEND_AMOUNT]);
+
+      // #when — send to two different stealth addresses
+      await stealthTransfer
+        .connect(alice)
+        .stealthSend(stealthAddr1.address, enc1, EPHEMERAL_PUB_KEY, METADATA);
+      await stealthTransfer
+        .connect(alice)
+        .stealthSend(stealthAddr2.address, enc2, EPHEMERAL_PUB_KEY, METADATA);
+
+      // #then — totalTransfers = 2
+      expect(await stealthTransfer.totalTransfers()).to.equal(2);
+    });
   });
 
   describe("stealthSendNative", function () {
@@ -257,6 +274,40 @@ describe("FHEStealthTransfer", function () {
             value: ethers.parseEther("0.1"),
           })
       ).to.be.revertedWithCustomError(stealthTransfer, "ZeroAddress");
+    });
+
+    it("should allow sending zero ETH", async function () {
+      // #when — send 0 value (no revert, just a zero-value transfer)
+      await expect(
+        stealthTransfer
+          .connect(alice)
+          .stealthSendNative(
+            stealthAddr1.address,
+            EPHEMERAL_PUB_KEY,
+            METADATA,
+            { value: 0 }
+          )
+      )
+        .to.emit(stealthTransfer, "StealthNativeTransfer");
+    });
+
+    it("should not hold ETH in the contract", async function () {
+      // #given — send some ETH through stealth
+      const sendValue = ethers.parseEther("1.0");
+      await stealthTransfer
+        .connect(alice)
+        .stealthSendNative(
+          stealthAddr1.address,
+          EPHEMERAL_PUB_KEY,
+          METADATA,
+          { value: sendValue }
+        );
+
+      // #then — contract balance remains zero (ETH forwarded)
+      const contractBalance = await ethers.provider.getBalance(
+        await stealthTransfer.getAddress()
+      );
+      expect(contractBalance).to.equal(0n);
     });
   });
 
@@ -336,6 +387,71 @@ describe("FHEStealthTransfer", function () {
           },
         ])
       ).to.be.revertedWithCustomError(stealthTransfer, "ZeroAddress");
+    });
+
+    it("should handle single-element batch", async function () {
+      const [enc1] = await encryptForStealth(alice, [SEND_AMOUNT]);
+
+      await stealthTransfer.connect(alice).batchStealthSend([
+        {
+          stealthAddress: stealthAddr1.address,
+          encAmount: enc1,
+          ephemeralPubKey: EPHEMERAL_PUB_KEY,
+          metadata: METADATA,
+        },
+      ]);
+
+      expect(await stealthTransfer.totalTransfers()).to.equal(1);
+    });
+
+    it("should allow batch send to same stealth address twice", async function () {
+      // #given — duplicate stealth addresses in batch
+      const [enc1, enc2] = await encryptForStealth(alice, [SEND_AMOUNT, SEND_AMOUNT]);
+
+      // #when — batch with same stealthAddr1 twice
+      await stealthTransfer.connect(alice).batchStealthSend([
+        {
+          stealthAddress: stealthAddr1.address,
+          encAmount: enc1,
+          ephemeralPubKey: EPHEMERAL_PUB_KEY,
+          metadata: METADATA,
+        },
+        {
+          stealthAddress: stealthAddr1.address,
+          encAmount: enc2,
+          ephemeralPubKey: EPHEMERAL_PUB_KEY,
+          metadata: METADATA,
+        },
+      ]);
+
+      // #then — totalTransfers incremented by 2
+      expect(await stealthTransfer.totalTransfers()).to.equal(2);
+    });
+  });
+
+  describe("mixed transfers", function () {
+    it("should track totalTransfers across stealth and native sends", async function () {
+      // #given — one encrypted stealth send + one native send
+      const [encAmount] = await encryptForStealth(alice, [SEND_AMOUNT]);
+
+      await stealthTransfer
+        .connect(alice)
+        .stealthSend(stealthAddr1.address, encAmount, EPHEMERAL_PUB_KEY, METADATA);
+      await stealthTransfer
+        .connect(alice)
+        .stealthSendNative(
+          stealthAddr2.address,
+          EPHEMERAL_PUB_KEY,
+          METADATA,
+          { value: ethers.parseEther("0.1") }
+        );
+
+      // #then — totalTransfers = 2 (both types counted)
+      expect(await stealthTransfer.totalTransfers()).to.equal(2);
+    });
+
+    it("should start totalTransfers at zero", async function () {
+      expect(await stealthTransfer.totalTransfers()).to.equal(0);
     });
   });
 });

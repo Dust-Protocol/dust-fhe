@@ -109,6 +109,69 @@ describe("FHENameRegistry", function () {
         })
       ).to.be.revertedWithCustomError(registry, "InvalidPubKeyLength");
     });
+
+    it("should reject name exceeding 32 characters", async function () {
+      const longName = "a".repeat(33);
+      await expect(
+        registry.connect(alice).registerName(longName, SPENDING_KEY, VIEWING_KEY, {
+          value: REGISTRATION_FEE,
+        })
+      ).to.be.revertedWithCustomError(registry, "NameTooLong");
+    });
+
+    it("should accept name at max length boundary (32 chars)", async function () {
+      const maxName = "a".repeat(32);
+      await registry.connect(alice).registerName(maxName, SPENDING_KEY, VIEWING_KEY, {
+        value: REGISTRATION_FEE,
+      });
+
+      const [spk] = await registry.resolveName(maxName);
+      expect(spk).to.equal(ethers.hexlify(SPENDING_KEY));
+    });
+
+    it("should reject name with spaces", async function () {
+      await expect(
+        registry.connect(alice).registerName("bad name", SPENDING_KEY, VIEWING_KEY, {
+          value: REGISTRATION_FEE,
+        })
+      ).to.be.revertedWithCustomError(registry, "NameInvalidChars");
+    });
+
+    it("should accept name with hyphens and underscores", async function () {
+      await registry.connect(alice).registerName("my-name_1", SPENDING_KEY, VIEWING_KEY, {
+        value: REGISTRATION_FEE,
+      });
+
+      const [spk] = await registry.resolveName("my-name_1");
+      expect(spk).to.equal(ethers.hexlify(SPENDING_KEY));
+    });
+
+    it("should emit NameRegistered event", async function () {
+      const nameHash = ethers.keccak256(ethers.toUtf8Bytes("eventtest"));
+      await expect(
+        registry.connect(alice).registerName("eventtest", SPENDING_KEY, VIEWING_KEY, {
+          value: REGISTRATION_FEE,
+        })
+      )
+        .to.emit(registry, "NameRegistered")
+        .withArgs(nameHash, alice.address, "eventtest");
+    });
+
+    it("should not override primary name on second registration", async function () {
+      // #given — alice registers first name (becomes primary)
+      await registry.connect(alice).registerName("first", SPENDING_KEY, VIEWING_KEY, {
+        value: REGISTRATION_FEE,
+      });
+      const firstHash = ethers.keccak256(ethers.toUtf8Bytes("first"));
+
+      // #when — alice registers second name
+      await registry.connect(alice).registerName("second", SPENDING_KEY, VIEWING_KEY, {
+        value: REGISTRATION_FEE,
+      });
+
+      // #then — primary name is still the first one
+      expect(await registry.primaryNames(alice.address)).to.equal(firstHash);
+    });
   });
 
   describe("resolveName", function () {
@@ -147,6 +210,22 @@ describe("FHENameRegistry", function () {
       await expect(
         registry.connect(bob).updateMetaAddress("alice", SPENDING_KEY_2, VIEWING_KEY_2)
       ).to.be.revertedWithCustomError(registry, "NotNameOwner");
+    });
+
+    it("should emit NameUpdated event", async function () {
+      const nameHash = ethers.keccak256(ethers.toUtf8Bytes("alice"));
+      await expect(
+        registry.connect(alice).updateMetaAddress("alice", SPENDING_KEY_2, VIEWING_KEY_2)
+      )
+        .to.emit(registry, "NameUpdated")
+        .withArgs(nameHash);
+    });
+
+    it("should reject update with invalid pubkey length", async function () {
+      const badKey = ethers.randomBytes(20);
+      await expect(
+        registry.connect(alice).updateMetaAddress("alice", badKey, VIEWING_KEY_2)
+      ).to.be.revertedWithCustomError(registry, "InvalidPubKeyLength");
     });
   });
 
@@ -237,6 +316,19 @@ describe("FHENameRegistry", function () {
       const balanceAfter = await ethers.provider.getBalance(owner.address);
 
       expect(balanceAfter + gasCost - balanceBefore).to.equal(REGISTRATION_FEE);
+    });
+
+    it("should reject withdraw from non-owner", async function () {
+      await expect(
+        registry.connect(alice).withdrawFees()
+      ).to.be.revertedWithCustomError(registry, "OwnableUnauthorizedAccount");
+    });
+
+    it("should emit RegistrationFeeUpdated event", async function () {
+      const newFee = ethers.parseEther("0.05");
+      await expect(registry.setRegistrationFee(newFee))
+        .to.emit(registry, "RegistrationFeeUpdated")
+        .withArgs(REGISTRATION_FEE, newFee);
     });
   });
 
