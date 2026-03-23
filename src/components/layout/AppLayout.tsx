@@ -31,14 +31,14 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   }, []);
 
   useEffect(() => {
-    if (pathname === "/" || pathname.startsWith("/pay/") || pathname === "/onboarding" || pathname.startsWith("/docs")) return;
+    if (pathname === "/" || pathname.startsWith("/pay/") || pathname === "/onboarding" || pathname.startsWith("/docs") || pathname.startsWith("/fhe")) return;
     if (!isHydrated) return;
     if (!isConnected) { router.replace("/"); return; }
     if (!address) return;
     if (!isOnboarded && isNamesSettled) { router.replace("/onboarding"); return; }
   }, [isConnected, isOnboarded, isNamesSettled, isHydrated, address, pathname, router]);
 
-  if (pathname === "/" || pathname === "/onboarding" || pathname.startsWith("/pay/")) {
+  if (pathname === "/" || pathname === "/onboarding" || pathname.startsWith("/pay/") || pathname.startsWith("/fhe")) {
     return <>{children}</>;
   }
 

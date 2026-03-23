@@ -1,14 +1,15 @@
 "use client";
 
-import React from "react";
-import { useAccount, useConnect, useChainId, useSwitchChain } from "wagmi";
+import React, { useState } from "react";
+import { useAccount, useConnect, useChainId, useSwitchChain, useWriteContract, useWaitForTransactionReceipt } from "wagmi";
 import { injected } from "wagmi/connectors";
 import { useFHEInit, useFHEBalance, useFHEStealthScanner } from "@/hooks/fhe";
-import { FHE_CHAIN_ID } from "@/lib/fhe";
+import { FHE_CHAIN_ID, FHE_CONTRACTS, MockUSDCABI } from "@/lib/fhe";
 import { useAuth } from "@/contexts/AuthContext";
 import { DustLogo } from "@/components/DustLogo";
 import Link from "next/link";
-import { formatUnits } from "viem";
+import { useRouter } from "next/navigation";
+import { formatUnits, parseUnits } from "viem";
 
 export default function DashboardClient() {
   const { address, isConnected } = useAccount();
@@ -19,33 +20,47 @@ export default function DashboardClient() {
   const { state: fheState } = useFHEInit();
   const { balance, isLoading: balanceLoading, error: balanceError, needsPermit, refetch } = useFHEBalance();
   const { payments, isScanning, scan, error: scanError } = useFHEStealthScanner(stealthKeys, address);
+  const router = useRouter();
+
+  const [recipient, setRecipient] = useState("");
+  const [showSendInput, setShowSendInput] = useState(false);
+
+  const { writeContract: mintUSDC, data: mintTxHash, isPending: isMinting, reset: resetMint } = useWriteContract();
+  const { isLoading: isMintConfirming, isSuccess: isMintSuccess } = useWaitForTransactionReceipt({ hash: mintTxHash });
 
   const chainMismatch = isConnected && chainId !== FHE_CHAIN_ID;
 
   const formattedBalance = balance !== null ? formatUnits(balance, 6) : null;
 
-  return (
-    <div className="min-h-screen bg-[#06080F] text-white flex flex-col">
-      {/* Header */}
-      <header className="border-b border-white/[0.04] bg-[#06080F]/95 backdrop-blur-md sticky top-0 z-10">
-        <div className="flex justify-between items-center max-w-[600px] mx-auto px-5 py-3.5">
-          <Link href="/" className="no-underline">
-            <div className="flex gap-2 items-center cursor-pointer">
-              <DustLogo size={20} color="#00FF41" />
-              <span className="text-[16px] font-bold text-white tracking-tight">Dust</span>
-            </div>
-          </Link>
-          <div className="px-2.5 py-1 bg-[rgba(139,92,246,0.08)] border border-[rgba(139,92,246,0.2)] rounded-sm">
-            <span className="text-[9px] text-purple-400 font-mono font-semibold tracking-wider uppercase">
-              FHE Dashboard
-            </span>
-          </div>
-        </div>
-      </header>
+  const handleMint = () => {
+    if (!address) return;
+    resetMint();
+    mintUSDC({
+      address: FHE_CONTRACTS.mockUSDC,
+      abi: MockUSDCABI,
+      functionName: 'mint',
+      args: [address, parseUnits('1000', 6)],
+    });
+  };
 
+  const handleSendNavigate = () => {
+    const name = recipient.trim().replace(/\.dust$/i, '');
+    if (!name) return;
+    router.push(`/fhe/pay/${encodeURIComponent(name)}`);
+  };
+
+  return (
+    <div className="flex flex-col">
       {/* Content */}
       <div className="flex-1 flex justify-center px-4 py-10">
-        <div className="w-full max-w-[600px] flex flex-col gap-6">
+        <div className="w-full max-w-[600px] flex flex-col gap-6 items-center">
+
+          {/* Testnet banner */}
+          <div className="w-full max-w-[600px] px-3 py-1.5 rounded-sm bg-[rgba(255,200,0,0.06)] border border-[rgba(255,200,0,0.15)] text-center">
+            <span className="text-[10px] text-[#eab308] font-mono tracking-wider">
+              ARBITRUM SEPOLIA TESTNET
+            </span>
+          </div>
 
           {!isConnected ? (
             <div className="rounded-md border border-[rgba(255,255,255,0.1)] bg-[#06080F] p-8 flex flex-col items-center gap-5">
@@ -115,7 +130,7 @@ export default function DashboardClient() {
                       <span className="text-3xl font-extrabold text-white font-mono">
                         {formattedBalance ?? "—"}
                       </span>
-                      <span className="text-base text-[rgba(255,255,255,0.4)] font-medium">cUSDC</span>
+                      <span className="text-base text-[rgba(255,255,255,0.4)] font-medium">USDC</span>
                     </>
                   )}
                 </div>
@@ -184,7 +199,7 @@ export default function DashboardClient() {
                             {payment.stealthAddress.slice(0, 6)}...{payment.stealthAddress.slice(-4)}
                           </span>
                           <span className="text-[9px] text-purple-400/60 font-mono">
-                            Encrypted cUSDC
+                            Encrypted USDC
                           </span>
                         </div>
                         <a
@@ -201,21 +216,58 @@ export default function DashboardClient() {
                 )}
               </div>
 
-              {/* Quick Actions */}
-              <div className="grid grid-cols-2 gap-3">
-                <Link href="/fhe/pay/someone" className="no-underline">
-                  <div className="rounded-md border border-[rgba(255,255,255,0.1)] bg-[#06080F] p-5 flex flex-col gap-3 hover:border-purple-500/30 transition-all cursor-pointer group">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#a78bfa" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="group-hover:stroke-purple-400 transition-colors">
-                      <line x1="22" y1="2" x2="11" y2="13" /><polygon points="22 2 15 22 11 13 2 9 22 2" />
-                    </svg>
-                    <div>
-                      <span className="text-sm font-semibold text-white font-mono block">Send</span>
-                      <span className="text-[10px] text-[rgba(255,255,255,0.3)] font-mono">
-                        Encrypted stealth payment
-                      </span>
+              {/* Get Test USDC */}
+              <div className="rounded-md border border-[rgba(255,255,255,0.1)] bg-[#06080F] p-6">
+                <div className="flex justify-between items-start mb-3">
+                  <div>
+                    <span className="text-[10px] text-[rgba(255,255,255,0.4)] font-mono uppercase tracking-wider">
+                      Testnet Faucet
+                    </span>
+                    <div className="mt-1">
+                      <span className="text-sm font-semibold text-white font-mono">Get Test USDC</span>
                     </div>
                   </div>
-                </Link>
+                  <span className="text-[10px] text-[rgba(255,255,255,0.3)] font-mono">1,000 USDC per mint</span>
+                </div>
+                <button
+                  onClick={handleMint}
+                  disabled={isMinting || isMintConfirming}
+                  className={`w-full py-3 rounded-sm font-mono text-xs font-semibold tracking-wider flex items-center justify-center gap-2 transition-all ${
+                    isMintSuccess
+                      ? "border border-green-500/30 bg-green-500/[0.05] text-green-400"
+                      : isMinting || isMintConfirming
+                        ? "border border-[rgba(255,255,255,0.06)] bg-[rgba(255,255,255,0.02)] text-[rgba(255,255,255,0.3)] cursor-wait"
+                        : "border border-[#00FF41]/30 bg-[#00FF41]/[0.05] text-[#00FF41] cursor-pointer hover:border-[#00FF41] hover:bg-[#00FF41]/[0.1] hover:shadow-[0_0_15px_rgba(0,255,65,0.15)]"
+                  }`}
+                >
+                  {isMinting ? (
+                    <><div className="w-3.5 h-3.5 border-2 border-white/30 border-t-transparent rounded-full animate-spin" /> MINTING...</>
+                  ) : isMintConfirming ? (
+                    <><div className="w-3.5 h-3.5 border-2 border-white/30 border-t-transparent rounded-full animate-spin" /> CONFIRMING...</>
+                  ) : isMintSuccess ? (
+                    "MINTED 1,000 USDC"
+                  ) : (
+                    "MINT 1,000 USDC"
+                  )}
+                </button>
+              </div>
+
+              {/* Quick Actions */}
+              <div className="grid grid-cols-2 gap-3">
+                <div
+                  onClick={() => setShowSendInput(v => !v)}
+                  className="rounded-md border border-[rgba(255,255,255,0.1)] bg-[#06080F] p-5 flex flex-col gap-3 hover:border-purple-500/30 transition-all cursor-pointer group"
+                >
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#a78bfa" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="group-hover:stroke-purple-400 transition-colors">
+                    <line x1="22" y1="2" x2="11" y2="13" /><polygon points="22 2 15 22 11 13 2 9 22 2" />
+                  </svg>
+                  <div>
+                    <span className="text-sm font-semibold text-white font-mono block">Send</span>
+                    <span className="text-[10px] text-[rgba(255,255,255,0.3)] font-mono">
+                      Encrypted stealth payment
+                    </span>
+                  </div>
+                </div>
 
                 <div className="rounded-md border border-[rgba(255,255,255,0.06)] bg-[#06080F] p-5 flex flex-col gap-3 opacity-50">
                   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.3)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -229,6 +281,38 @@ export default function DashboardClient() {
                   </div>
                 </div>
               </div>
+
+              {/* Send recipient input */}
+              {showSendInput && (
+                <div className="rounded-md border border-purple-500/20 bg-[#06080F] p-5 flex flex-col gap-3">
+                  <label className="text-[10px] text-[rgba(255,255,255,0.4)] font-mono uppercase tracking-wider">
+                    Recipient Name
+                  </label>
+                  <div className="flex gap-2">
+                    <div className="flex-1 flex items-center gap-0 rounded-sm border border-[rgba(255,255,255,0.1)] bg-[rgba(255,255,255,0.03)] focus-within:border-purple-400 transition-all">
+                      <input
+                        placeholder="alice"
+                        value={recipient}
+                        onChange={(e) => setRecipient(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === 'Enter') handleSendNavigate(); }}
+                        className="flex-1 py-2.5 px-3 bg-transparent text-white font-mono text-sm focus:outline-none placeholder-[rgba(255,255,255,0.2)]"
+                      />
+                      <span className="text-[11px] text-[rgba(255,255,255,0.3)] font-mono pr-3">.dust</span>
+                    </div>
+                    <button
+                      onClick={handleSendNavigate}
+                      disabled={!recipient.trim()}
+                      className={`px-4 py-2.5 rounded-sm font-mono text-[11px] font-semibold tracking-wider transition-all ${
+                        recipient.trim()
+                          ? "border border-purple-500/30 bg-purple-500/10 text-purple-400 cursor-pointer hover:bg-purple-500/15 hover:border-purple-400"
+                          : "border border-[rgba(255,255,255,0.06)] bg-[rgba(255,255,255,0.02)] text-[rgba(255,255,255,0.3)] cursor-not-allowed"
+                      }`}
+                    >
+                      PAY
+                    </button>
+                  </div>
+                </div>
+              )}
 
               {/* Info */}
               <div className="rounded-md border border-[rgba(139,92,246,0.1)] bg-[rgba(139,92,246,0.02)] p-4">
@@ -262,3 +346,5 @@ export default function DashboardClient() {
     </div>
   );
 }
+
+export { DashboardClient };
