@@ -155,12 +155,7 @@ function DashboardContent() {
   const handleClaim = async (stealthPrivateKey: string, stealthAddress: string) => {
     setClaimingPayment(stealthAddress);
     resetClaim();
-    // For Wave 1: we pass the full stealth balance
-    // The claim hook encrypts this amount and sends confidentialTransfer
-    // We use a fixed test amount since we can't easily decrypt the stealth balance
-    // from the main wallet (CoFHE permit is bound to the stealth address)
-    // TODO: In production, decrypt via stealth wallet's CoFHE permit
-    await claim(stealthPrivateKey, stealthAddress, parseUnits('500', 6));
+    await claim(stealthPrivateKey, stealthAddress);
   };
 
   const depositStepLabel = isApproving ? "Approving..." :

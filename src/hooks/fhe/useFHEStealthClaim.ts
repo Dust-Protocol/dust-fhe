@@ -1,14 +1,18 @@
 import { useState, useCallback, useRef } from 'react';
-import { useAccount, usePublicClient } from 'wagmi';
+import { useAccount } from 'wagmi';
 import { useCofheEncrypt } from '@cofhe/react';
-import { Encryptable } from '@cofhe/sdk';
+import { Encryptable, FheTypes } from '@cofhe/sdk';
 import type { EncryptedItemInput } from '@cofhe/sdk';
+import { createCofheClient, createCofheConfig } from '@cofhe/sdk/web';
+import { arbSepolia } from '@cofhe/sdk/chains';
 import { ethers } from 'ethers';
+import { createWalletClient, createPublicClient, http } from 'viem';
+import { privateKeyToAccount } from 'viem/accounts';
+import { arbitrumSepolia } from 'viem/chains';
 import {
-  FHE_CONTRACTS, FHE_CHAIN_ID,
+  FHE_CONTRACTS,
   ConfidentialTokenABI,
 } from '@/lib/fhe';
-import type { Address } from 'viem';
 import { encodeFunctionData } from 'viem';
 
 export type ClaimStep =
@@ -22,7 +26,7 @@ export type ClaimStep =
   | 'error';
 
 interface UseFHEStealthClaimResult {
-  claim: (stealthPrivateKey: string, stealthAddress: string, plaintextAmount: bigint) => Promise<string | null>;
+  claim: (stealthPrivateKey: string, stealthAddress: string) => Promise<string | null>;
   step: ClaimStep;
   isLoading: boolean;
   error: string | null;
@@ -37,23 +41,8 @@ function encryptedInputToContractArg(input: EncryptedItemInput): { data: `0x${st
   return { data: sig as `0x${string}` };
 }
 
-/**
- * Claim FHE stealth payments by forwarding encrypted balance from a stealth
- * address to the connected wallet's main address.
- *
- * Flow:
- * 1. Sponsor gas to the stealth address (it has no ETH)
- * 2. Encrypt the known plaintext amount via CoFHE (produces InEuint64 with ZK proof)
- * 3. Send confidentialTransfer(mainAddress, encAmount) FROM the stealth wallet
- *
- * The caller must provide the plaintext amount — obtained by decrypting the
- * stealth balance during the scanning phase (Task 3). This avoids needing a
- * CoFHE permit for the stealth address, which would require the stealth wallet
- * to sign an EIP-712 permit message through the CoFHE React context.
- */
 export function useFHEStealthClaim(): UseFHEStealthClaimResult {
   const { address: mainAddress } = useAccount();
-  const publicClient = usePublicClient({ chainId: FHE_CHAIN_ID });
   const { encryptInputsAsync } = useCofheEncrypt();
   const [step, setStep] = useState<ClaimStep>('idle');
   const [error, setError] = useState<string | null>(null);
@@ -69,10 +58,8 @@ export function useFHEStealthClaim(): UseFHEStealthClaimResult {
   const claim = useCallback(async (
     stealthPrivateKey: string,
     stealthAddress: string,
-    plaintextAmount: bigint,
   ): Promise<string | null> => {
     if (!mainAddress) { setError('Wallet not connected'); return null; }
-    if (!publicClient) { setError('Public client not available'); return null; }
     if (claimingRef.current) return null;
     claimingRef.current = true;
     setError(null);
@@ -90,27 +77,86 @@ export function useFHEStealthClaim(): UseFHEStealthClaimResult {
       });
       if (!fundRes.ok) {
         const fundErr = await fundRes.json().catch(() => ({ error: 'Unknown error' }));
-        throw new Error(fundErr.error || 'Failed to fund gas for stealth address');
+        throw new Error(fundErr.error || 'Failed to fund gas');
       }
       const fundData = await fundRes.json();
       if (fundData.txHash) {
         await provider.waitForTransaction(fundData.txHash);
       }
 
-      // Step 2: Encrypt the plaintext amount via CoFHE
-      // confidentialTransfer requires InEuint64 — a client-encrypted input with
-      // ZK proof against the network FHE public key. The CoFHE React context
-      // handles key fetching, proof generation, and verification.
-      setStep('encrypting');
-      if (plaintextAmount <= 0n) {
-        throw new Error('No balance to claim');
+      // Step 2: Decrypt stealth balance using stealth private key + CoFHE
+      // The stealth address has FHE.allow for its own balance.
+      // We create a temporary CoFHE client connected with the stealth wallet
+      // to generate a permit and decrypt.
+      setStep('decrypting');
+
+      const stealthKey = stealthPrivateKey.startsWith('0x') ? stealthPrivateKey : `0x${stealthPrivateKey}`;
+      const stealthAccount = privateKeyToAccount(stealthKey as `0x${string}`);
+
+      const viemPublicClient = createPublicClient({
+        chain: arbitrumSepolia,
+        transport: http(ARB_SEPOLIA_RPC),
+      });
+      const stealthWalletClient = createWalletClient({
+        account: stealthAccount,
+        chain: arbitrumSepolia,
+        transport: http(ARB_SEPOLIA_RPC),
+      });
+
+      // Read the encrypted balance handle
+      const ctHash = await viemPublicClient.readContract({
+        address: FHE_CONTRACTS.confidentialToken,
+        abi: ConfidentialTokenABI,
+        functionName: 'getEncryptedBalanceOf',
+        args: [stealthAddress as `0x${string}`],
+      });
+
+      if (!ctHash || BigInt(ctHash as any) === 0n) {
+        throw new Error('No encrypted balance at stealth address');
       }
-      const encResult = await encryptInputsAsync([Encryptable.uint64(plaintextAmount)]);
+
+      // Create a temporary CoFHE client with the stealth wallet
+      const stealthCofheConfig = createCofheConfig({
+        supportedChains: [arbSepolia],
+      });
+      const stealthCofheClient = createCofheClient(stealthCofheConfig);
+
+      // Connect with stealth wallet
+      await stealthCofheClient.connect(
+        viemPublicClient as any,
+        stealthWalletClient as any,
+      );
+
+      // Create a self-permit for the stealth address
+      const permit = await stealthCofheClient.permits.getOrCreateSelfPermit(
+        arbitrumSepolia.id,
+        stealthAddress,
+      );
+
+      // Decrypt the balance
+      const plaintextAmount = await stealthCofheClient.decryptForView(
+        BigInt(ctHash as any),
+        FheTypes.Uint64,
+      )
+        .withPermit()
+        .execute();
+
+      const amount = BigInt(plaintextAmount as any);
+
+      // Disconnect stealth client
+      stealthCofheClient.disconnect();
+
+      if (amount <= 0n) {
+        throw new Error('Stealth balance is zero');
+      }
+
+      // Step 3: Re-encrypt the known amount with the main wallet's CoFHE context
+      // confidentialTransfer requires a fresh InEuint64 (client-encrypted with ZK proof)
+      setStep('encrypting');
+      const encResult = await encryptInputsAsync([Encryptable.uint64(amount)]);
       const encAmount = encResult[0];
 
-      // Step 3: Build and send confidentialTransfer from the stealth wallet
-      // We encode the calldata via viem (type-safe ABI encoding) and send
-      // the raw tx via ethers (stealth private key not in wagmi)
+      // Step 4: Send confidentialTransfer from stealth wallet → main address
       setStep('transferring');
       const calldata = encodeFunctionData({
         abi: ConfidentialTokenABI,
@@ -118,8 +164,8 @@ export function useFHEStealthClaim(): UseFHEStealthClaimResult {
         args: [mainAddress, encryptedInputToContractArg(encAmount)],
       });
 
-      const stealthWallet = new ethers.Wallet(stealthPrivateKey, provider);
-      const tx = await stealthWallet.sendTransaction({
+      const ethersStealthWallet = new ethers.Wallet(stealthKey, provider);
+      const tx = await ethersStealthWallet.sendTransaction({
         to: FHE_CONTRACTS.confidentialToken,
         data: calldata,
         gasLimit: 500_000,
@@ -128,7 +174,7 @@ export function useFHEStealthClaim(): UseFHEStealthClaimResult {
       setStep('confirming');
       const receipt = await tx.wait();
       if (receipt.status === 0) {
-        throw new Error('Confidential transfer reverted');
+        throw new Error('Transfer reverted');
       }
 
       setTxHash(receipt.transactionHash);
@@ -142,7 +188,7 @@ export function useFHEStealthClaim(): UseFHEStealthClaimResult {
     } finally {
       claimingRef.current = false;
     }
-  }, [mainAddress, publicClient, encryptInputsAsync]);
+  }, [mainAddress, encryptInputsAsync]);
 
   return {
     claim,
