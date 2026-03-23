@@ -7,6 +7,7 @@ import { UnifiedBalanceCard } from "@/components/dashboard/UnifiedBalanceCard";
 import { PersonalLinkCard } from "@/components/dashboard/PersonalLinkCard";
 import { SendIcon, ArrowDownLeftIcon } from "@/components/stealth/icons";
 import { ReceiveModal } from "@/components/dashboard/ReceiveModal";
+import { V2PoolCard } from "@/components/dustpool/V2PoolCard";
 import { useReadContract } from 'wagmi';
 import { useRouter } from 'next/navigation';
 import { formatUnits } from 'viem';
@@ -16,7 +17,7 @@ import { useFHEBalance, useFHEStealthScanner } from '@/hooks/fhe';
 const FHEProviderWrapper = dynamic(() => import("@/app/fhe/FHEProviderWrapper"), { ssr: false });
 
 function DashboardContent() {
-  const { stealthKeys, metaAddress, ownedNames, isNamesSettled, address } = useAuth();
+  const { stealthKeys, metaAddress, ownedNames, isNamesSettled, address, activeChainId } = useAuth();
   const router = useRouter();
 
   const [showReceiveModal, setShowReceiveModal] = useState(false);
@@ -178,6 +179,8 @@ function DashboardContent() {
             </div>
           )}
         </div>
+
+        <V2PoolCard chainId={activeChainId} />
 
         <PersonalLinkCard ownedNames={ownedNames} metaAddress={metaAddress} isNamesSettled={isNamesSettled} />
 
