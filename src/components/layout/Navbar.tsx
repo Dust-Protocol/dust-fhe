@@ -47,6 +47,7 @@ const navItems = [
   { href: "/wallet", label: "Wallet" },
   { href: "/links", label: "Links" },
   { href: "/activities", label: "Activity" },
+  { href: "/faucet", label: "Faucet" },
   { href: "/settings", label: "Settings" },
   { href: "/docs", label: "Docs" },
 ];
