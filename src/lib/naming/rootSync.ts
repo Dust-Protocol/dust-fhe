@@ -6,8 +6,8 @@ import { ethers } from 'ethers';
 import { getChainConfig, getSupportedChains } from '@/config/chains';
 import { getServerProvider, getServerSponsor } from '@/lib/server-provider';
 
-// Canonical chain is Ethereum Sepolia
-const CANONICAL_CHAIN_ID = 11155111;
+// Canonical chain is Arbitrum Sepolia (FHE deployment)
+const CANONICAL_CHAIN_ID = 421614;
 
 const NAME_REGISTRY_MERKLE_ABI = [
   'function getLastRoot() view returns (bytes32)',

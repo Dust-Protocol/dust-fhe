@@ -254,7 +254,7 @@ const ARBITRUM_SEPOLIA_CONFIG: ChainConfig = {
   deploymentBlock: 246396709,
   dustPoolDeploymentBlock: null,
   supportsEIP7702: false,
-  canonicalForNaming: false,
+  canonicalForNaming: true,
   testnet: true,
   isL2: true,
   iconFamily: 'arbitrum',
@@ -432,15 +432,10 @@ const BASE_MAINNET_CONFIG: ChainConfig = {
 // ─── Registry ──────────────────────────────────────────────────────────────────
 
 const CHAIN_CONFIGS: Record<number, ChainConfig> = {
-  [THANOS_SEPOLIA_CONFIG.id]: THANOS_SEPOLIA_CONFIG,
-  [ETHEREUM_SEPOLIA_CONFIG.id]: ETHEREUM_SEPOLIA_CONFIG,
   [ARBITRUM_SEPOLIA_CONFIG.id]: ARBITRUM_SEPOLIA_CONFIG,
-  [OP_SEPOLIA_CONFIG.id]: OP_SEPOLIA_CONFIG,
-  [BASE_SEPOLIA_CONFIG.id]: BASE_SEPOLIA_CONFIG,
-  // Base Mainnet (8453) excluded until contracts are deployed
 };
 
-export const DEFAULT_CHAIN_ID = 11155111;
+export const DEFAULT_CHAIN_ID = 421614;
 
 export function getChainConfig(chainId?: number): ChainConfig {
   const id = chainId ?? DEFAULT_CHAIN_ID;
