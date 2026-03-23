@@ -6,6 +6,8 @@ import { validatePin } from "@/lib/stealth/pin";
 
 interface PinStepProps {
   onNext: (pin: string) => void;
+  onBack?: () => void;
+  error?: string | null;
 }
 
 function PinInput({ value, onChange }: { value: string; onChange: (v: string) => void }) {
@@ -69,7 +71,7 @@ function PinInput({ value, onChange }: { value: string; onChange: (v: string) =>
   );
 }
 
-export function PinStep({ onNext }: PinStepProps) {
+export function PinStep({ onNext, onBack, error: externalError }: PinStepProps) {
   const [step, setStep] = useState<"create" | "confirm">("create");
   const [pin, setPin] = useState("");
   const [confirmPin, setConfirmPin] = useState("");
@@ -149,14 +151,22 @@ export function PinStep({ onNext }: PinStepProps) {
         <PinInput value={confirmPin} onChange={setConfirmPin} />
       )}
 
-      {error && (
+      {(error || externalError) && (
         <div className="flex items-center gap-[6px] pl-[2px]">
           <AlertCircleIcon size={12} color="#ef4444" />
-          <span className="text-[12px] text-[#ef4444] font-mono">{error}</span>
+          <span className="text-[12px] text-[#ef4444] font-mono">{error || externalError}</span>
         </div>
       )}
 
       <div className="flex gap-[10px]">
+        {step === "create" && onBack && (
+          <button
+            onClick={onBack}
+            className="flex-1 h-11 rounded-sm bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.1)] hover:bg-[rgba(255,255,255,0.05)] hover:border-[rgba(255,255,255,0.2)] font-medium text-[14px] text-[rgba(255,255,255,0.5)] font-mono tracking-wider transition-all"
+          >
+            Back
+          </button>
+        )}
         {step === "confirm" && (
           <button
             onClick={() => { submittedRef.current = false; setStep("create"); setPin(""); setConfirmPin(""); setError(null); }}
@@ -170,7 +180,7 @@ export function PinStep({ onNext }: PinStepProps) {
           disabled={!isReady}
           className={[
             "h-11 rounded-sm text-[14px] font-bold font-mono tracking-wider transition-all",
-            step === "confirm" ? "flex-[2]" : "w-full",
+            step === "confirm" || (step === "create" && onBack) ? "flex-[2]" : "w-full",
             isReady
               ? "py-3 px-4 bg-[rgba(0,255,65,0.1)] border border-[rgba(0,255,65,0.2)] hover:bg-[rgba(0,255,65,0.15)] hover:border-[#00FF41] text-[#00FF41]"
               : "bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.06)] text-[rgba(255,255,255,0.3)] cursor-not-allowed",

@@ -185,7 +185,11 @@ export function OnboardingWizard() {
             />
           )}
           {step === "pin" && (
-            <PinStep onNext={handlePinComplete} />
+            <PinStep
+              onNext={handlePinComplete}
+              onBack={!isReactivation && !isReclaiming ? () => { setError(null); setStep("username"); } : undefined}
+              error={error}
+            />
           )}
           {step === "activating" && (
             <div className="flex flex-col gap-5">
