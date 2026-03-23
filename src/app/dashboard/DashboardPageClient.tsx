@@ -52,7 +52,7 @@ function DashboardContent() {
     address: FHE_CONTRACTS.mockUSDC,
     abi: MockUSDCABI,
     functionName: 'balanceOf',
-    args: address ? [address] : undefined,
+    args: address ? [address as `0x${string}`] : undefined,
     chainId: FHE_CHAIN_ID,
   });
   const usdcBalance = rawUsdcBalance !== undefined ? formatUnits(rawUsdcBalance as bigint, 6) : null;
