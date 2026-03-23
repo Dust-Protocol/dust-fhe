@@ -1,7 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { RefreshCwIcon, EyeOffIcon, CheckIcon } from "lucide-react";
+import { RefreshCwIcon, EyeOffIcon, CheckIcon, LockIcon } from "lucide-react";
 import { getChainConfig } from "@/config/chains";
 import { useAuth } from "@/contexts/AuthContext";
 import { ETHIcon } from "@/components/stealth/icons";
@@ -20,6 +20,13 @@ interface UnifiedBalanceCardProps {
   encryptedUsdcLoading?: boolean;
 }
 
+function formatUsdcDisplay(raw: string | null | undefined): string {
+  if (!raw) return "0.00";
+  const num = parseFloat(raw);
+  if (isNaN(num)) return "0.00";
+  return num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
 export function UnifiedBalanceCard({
   total,
   stealthTotal,
@@ -36,7 +43,10 @@ export function UnifiedBalanceCard({
   const { activeChainId } = useAuth();
   const chainConfig = getChainConfig(activeChainId);
   const symbol = chainConfig.nativeCurrency.symbol;
-  const loading = isScanning || isLoading;
+  const loading = isScanning || isLoading || usdcLoading;
+
+  const usdcDisplay = formatUsdcDisplay(usdcBalance);
+  const encDisplay = formatUsdcDisplay(encryptedUsdcBalance);
 
   return (
     <motion.div
@@ -64,61 +74,63 @@ export function UnifiedBalanceCard({
         </button>
       </div>
 
+      {/* Primary: USDC balance */}
       <div className="mb-6">
         <h2 className="text-3xl font-bold text-white font-mono tracking-tight mb-1 flex items-center gap-2">
-          {total.toFixed(4)} <span className="flex items-center gap-1"><ETHIcon size={20} />{symbol}</span>
+          {usdcLoading ? "..." : usdcDisplay} <span className="text-base text-[rgba(255,255,255,0.4)] font-medium">USDC</span>
         </h2>
       </div>
 
       <div className="grid grid-cols-2 gap-4 mb-6">
-        <div className="p-3 rounded-sm border border-[rgba(255,255,255,0.04)] bg-[rgba(255,255,255,0.01)]">
-          <div className="flex items-center gap-1.5 mb-1">
-            <EyeOffIcon className="w-3 h-3 text-[rgba(255,255,255,0.4)]" />
-            <span className="text-[9px] text-[rgba(255,255,255,0.5)] uppercase tracking-wider font-mono">
-              Stealth
-            </span>
-          </div>
-          <span className="text-sm font-bold text-white font-mono flex items-center gap-1">
-            {stealthTotal.toFixed(4)} <ETHIcon size={14} /> {symbol}
-          </span>
-        </div>
+        {/* Available USDC (plain) */}
         <div className="p-3 rounded-sm border border-[rgba(255,255,255,0.04)] bg-[rgba(255,255,255,0.01)]">
           <div className="flex items-center gap-1.5 mb-1">
             <CheckIcon className="w-3 h-3 text-[rgba(255,255,255,0.4)]" />
             <span className="text-[9px] text-[rgba(255,255,255,0.5)] uppercase tracking-wider font-mono">
-              Claimed
+              Available
             </span>
           </div>
-          <span className="text-sm font-bold text-white font-mono flex items-center gap-1">
-            {claimTotal.toFixed(4)} <ETHIcon size={14} /> {symbol}
+          <span className="text-sm font-bold text-white font-mono">
+            {usdcLoading ? "..." : usdcDisplay} USDC
+          </span>
+        </div>
+        {/* Encrypted USDC (in ConfidentialToken) */}
+        <div className="p-3 rounded-sm border border-[rgba(255,255,255,0.04)] bg-[rgba(255,255,255,0.01)]">
+          <div className="flex items-center gap-1.5 mb-1">
+            <LockIcon className="w-3 h-3 text-[rgba(255,255,255,0.4)]" />
+            <span className="text-[9px] text-[rgba(255,255,255,0.5)] uppercase tracking-wider font-mono">
+              Encrypted
+            </span>
+          </div>
+          <span className="text-sm font-bold text-white font-mono">
+            {encryptedUsdcLoading ? "..." : encDisplay} USDC
           </span>
         </div>
       </div>
 
-      {/* USDC Balances */}
-      {(usdcBalance !== undefined || encryptedUsdcBalance !== undefined) && (
+      {/* Secondary: ETH stealth balances */}
+      {(stealthTotal > 0 || claimTotal > 0) && (
         <div className="grid grid-cols-2 gap-4 mb-6">
           <div className="p-3 rounded-sm border border-[rgba(255,255,255,0.04)] bg-[rgba(255,255,255,0.01)]">
             <div className="flex items-center gap-1.5 mb-1">
+              <EyeOffIcon className="w-3 h-3 text-[rgba(255,255,255,0.4)]" />
               <span className="text-[9px] text-[rgba(255,255,255,0.5)] uppercase tracking-wider font-mono">
-                USDC
+                Stealth
               </span>
             </div>
-            <span className="text-sm font-bold text-white font-mono">
-              {usdcLoading ? "..." : usdcBalance ?? "0.00"}
+            <span className="text-sm font-bold text-white font-mono flex items-center gap-1">
+              {stealthTotal.toFixed(4)} <ETHIcon size={14} /> {symbol}
             </span>
           </div>
           <div className="p-3 rounded-sm border border-[rgba(255,255,255,0.04)] bg-[rgba(255,255,255,0.01)]">
             <div className="flex items-center gap-1.5 mb-1">
-              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.4)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <rect x="3" y="11" width="18" height="11" rx="2" ry="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" />
-              </svg>
+              <CheckIcon className="w-3 h-3 text-[rgba(255,255,255,0.4)]" />
               <span className="text-[9px] text-[rgba(255,255,255,0.5)] uppercase tracking-wider font-mono">
-                Encrypted
+                Claimed
               </span>
             </div>
-            <span className="text-sm font-bold text-white font-mono">
-              {encryptedUsdcLoading ? "..." : encryptedUsdcBalance ?? "0.00"}
+            <span className="text-sm font-bold text-white font-mono flex items-center gap-1">
+              {claimTotal.toFixed(4)} <ETHIcon size={14} /> {symbol}
             </span>
           </div>
         </div>
