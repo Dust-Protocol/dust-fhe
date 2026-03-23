@@ -2,6 +2,7 @@
 
 import React, { useState, useRef, useEffect, KeyboardEvent, ChangeEvent, ClipboardEvent } from "react";
 import { AlertCircleIcon } from "@/components/stealth/icons";
+import { validatePin } from "@/lib/stealth/pin";
 
 interface PinStepProps {
   onNext: (pin: string) => void;
@@ -45,16 +46,15 @@ function PinInput({ value, onChange }: { value: string; onChange: (v: string) =>
         <input
           key={i}
           ref={(el) => { refs.current[i] = el; }}
-          type="text"
+          type="password"
           inputMode="numeric"
           pattern="[0-9]*"
-          autoComplete="one-time-code"
+          autoComplete="off"
           maxLength={1}
           value={value[i] || ""}
           onChange={(e: ChangeEvent<HTMLInputElement>) => handleChange(i, e.target.value)}
           onKeyDown={(e: KeyboardEvent<HTMLInputElement>) => handleKeyDown(i, e)}
           onPaste={handlePaste}
-          style={{ WebkitTextSecurity: "disc" } as React.CSSProperties}
           className={[
             "w-11 h-[52px] text-center text-[20px] font-semibold rounded-sm font-mono",
             "bg-[rgba(255,255,255,0.03)] text-white",
@@ -74,23 +74,29 @@ export function PinStep({ onNext }: PinStepProps) {
   const [pin, setPin] = useState("");
   const [confirmPin, setConfirmPin] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const submittedRef = useRef(false);
 
-  // Auto-submit when 6 digits entered (create step)
   useEffect(() => {
     if (step === "create" && pin.length === 6) {
+      const validation = validatePin(pin);
+      if (!validation.valid) {
+        setError(validation.error ?? "Invalid PIN");
+        setPin("");
+        return;
+      }
       setError(null);
       setStep("confirm");
       setConfirmPin("");
     }
   }, [pin, step]);
 
-  // Auto-submit when 6 digits entered (confirm step)
   useEffect(() => {
-    if (step === "confirm" && confirmPin.length === 6) {
+    if (step === "confirm" && confirmPin.length === 6 && !submittedRef.current) {
       if (confirmPin !== pin) {
         setError("PINs do not match");
         setConfirmPin("");
       } else {
+        submittedRef.current = true;
         setError(null);
         onNext(pin);
       }
@@ -98,18 +104,25 @@ export function PinStep({ onNext }: PinStepProps) {
   }, [confirmPin, step, pin, onNext]);
 
   const handleCreateNext = () => {
-    if (pin.length !== 6) { setError("PIN must be 6 digits"); return; }
+    const validation = validatePin(pin);
+    if (!validation.valid) {
+      setError(validation.error ?? "Invalid PIN");
+      setPin("");
+      return;
+    }
     setError(null);
     setStep("confirm");
     setConfirmPin("");
   };
 
   const handleConfirm = () => {
+    if (submittedRef.current) return;
     if (confirmPin !== pin) {
       setError("PINs do not match");
       setConfirmPin("");
       return;
     }
+    submittedRef.current = true;
     setError(null);
     onNext(pin);
   };
@@ -146,7 +159,7 @@ export function PinStep({ onNext }: PinStepProps) {
       <div className="flex gap-[10px]">
         {step === "confirm" && (
           <button
-            onClick={() => { setStep("create"); setPin(""); setConfirmPin(""); setError(null); }}
+            onClick={() => { submittedRef.current = false; setStep("create"); setPin(""); setConfirmPin(""); setError(null); }}
             className="flex-1 h-11 rounded-sm bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.1)] hover:bg-[rgba(255,255,255,0.05)] hover:border-[rgba(255,255,255,0.2)] font-medium text-[14px] text-[rgba(255,255,255,0.5)] font-mono tracking-wider transition-all"
           >
             Back

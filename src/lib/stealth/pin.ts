@@ -74,11 +74,18 @@ export async function deriveClaimSeedV1(signature: string, pin: string): Promise
   return bytesToHex(await webCryptoPbkdf2(password, salt, 100_000, 32));
 }
 
+const WEAK_PINS = new Set([
+  '000000', '111111', '222222', '333333', '444444', '555555',
+  '666666', '777777', '888888', '999999', '123456', '654321',
+  '123123', '121212', '696969', '112233', '159753', '292513',
+]);
+
 // Validate PIN format: exactly 6 digits
 export function validatePin(pin: string): { valid: boolean; error?: string } {
   if (!pin) return { valid: false, error: 'PIN is required' };
   if (pin.length !== 6) return { valid: false, error: 'PIN must be exactly 6 digits' };
   if (!/^\d{6}$/.test(pin)) return { valid: false, error: 'PIN must contain only digits' };
+  if (WEAK_PINS.has(pin)) return { valid: false, error: 'PIN is too common — choose a stronger one' };
   return { valid: true };
 }
 
