@@ -66,6 +66,12 @@ export function useFHEStealthSend(): UseFHEStealthSendResult {
 
     try {
       setStep('resolving');
+
+      // Wave 1: .dust names only. Direct 0x sends require ERC-6538 registry integration.
+      if (name.startsWith('0x') && name.length === 42) {
+        throw new Error('Direct 0x address sends coming soon — use a .dust name');
+      }
+
       const [spendingPubKey, viewingPubKey] = await publicClient.readContract({
         address: FHE_CONTRACTS.nameRegistry,
         abi: FHENameRegistryABI,

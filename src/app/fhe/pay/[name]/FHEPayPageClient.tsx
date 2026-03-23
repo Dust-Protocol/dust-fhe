@@ -43,17 +43,18 @@ export default function FHEPayPageClient({ name }: { name: string }) {
   const [resolveError, setResolveError] = useState(false);
   const resolveCheckedRef = useRef(false);
 
-  const fullName = `${name}.dust`;
+  const isAddress = name.startsWith('0x') && name.length === 42;
+  const fullName = isAddress ? name : `${name}.dust`;
   const chainMismatch = isConnected && walletChainId !== FHE_CHAIN_ID;
 
-  // Verify name exists on FHENameRegistry
+  // Verify name exists on FHENameRegistry (skip for raw 0x addresses)
   useEffect(() => {
-    if (resolveCheckedRef.current) return;
+    if (resolveCheckedRef.current || isAddress) return;
     resolveCheckedRef.current = true;
     fetch(`/api/fhe/resolve-name/${encodeURIComponent(name)}`)
       .then(res => { if (!res.ok) setResolveError(true); })
       .catch(() => setResolveError(true));
-  }, [name]);
+  }, [name, isAddress]);
 
   // Track send step transitions
   useEffect(() => {
