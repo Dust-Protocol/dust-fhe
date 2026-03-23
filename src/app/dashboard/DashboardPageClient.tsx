@@ -1,63 +1,32 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useCallback } from "react";
 import dynamic from "next/dynamic";
 import { useAuth } from "@/contexts/AuthContext";
-import { useStealthScanner, useUnifiedBalance, useDustPool } from "@/hooks/stealth";
-import { getChainConfig } from "@/config/chains";
 import { UnifiedBalanceCard } from "@/components/dashboard/UnifiedBalanceCard";
-import { AddressBreakdownCard } from "@/components/dashboard/AddressBreakdownCard";
 import { PersonalLinkCard } from "@/components/dashboard/PersonalLinkCard";
-import { RecentActivityCard } from "@/components/dashboard/RecentActivityCard";
-import { PrivacyPoolCard } from "@/components/dashboard/PrivacyPoolCard";
-import { V2PoolCard } from "@/components/dustpool/V2PoolCard";
-import { SendModal } from "@/components/send/SendModal";
-import { ReceiveModal } from "@/components/dashboard/ReceiveModal";
-import { ConsolidateModal } from "@/components/dashboard/ConsolidateModal";
 import { SendIcon, ArrowDownLeftIcon } from "@/components/stealth/icons";
-import { loadOutgoingPayments } from '@/hooks/stealth/useStealthSend';
-import { storageKey } from '@/lib/storageKey';
-import { RestoringBanner } from '@/components/RestoringBanner';
-import type { OutgoingPayment } from '@/lib/design/types';
+import { ReceiveModal } from "@/components/dashboard/ReceiveModal";
 import { useReadContract } from 'wagmi';
+import { useRouter } from 'next/navigation';
 import { formatUnits } from 'viem';
 import { FHE_CONTRACTS, MockUSDCABI, FHE_CHAIN_ID } from '@/lib/fhe';
-import { useFHEBalance } from '@/hooks/fhe';
+import { useFHEBalance, useFHEStealthScanner } from '@/hooks/fhe';
 
 const FHEProviderWrapper = dynamic(() => import("@/app/fhe/FHEProviderWrapper"), { ssr: false });
 
-function claimToPoolKey(address: string, chainId: number): string {
-  return storageKey('claim2pool', address, chainId);
-}
-
 function DashboardContent() {
-  const { stealthKeys, metaAddress, ownedNames, claimAddresses, refreshClaimBalances, claimAddressesInitialized, activeChainId, address, isNamesSettled } = useAuth();
-  const chainConfig = getChainConfig(activeChainId);
-  const [claimToPool, setClaimToPool] = useState(() => {
-    if (typeof window === 'undefined' || !address) return false;
-    return localStorage.getItem(claimToPoolKey(address, activeChainId)) === 'true';
-  });
-  const { payments, scan, scanInBackground, stopBackgroundScan, isScanning, depositToPool } = useStealthScanner(stealthKeys, { claimToPool, chainId: activeChainId });
-  const [showSendModal, setShowSendModal] = useState(false);
+  const { stealthKeys, metaAddress, ownedNames, isNamesSettled, address } = useAuth();
+  const router = useRouter();
+
   const [showReceiveModal, setShowReceiveModal] = useState(false);
-  const [showConsolidateModal, setShowConsolidateModal] = useState(false);
-
-  const [outgoingPayments, setOutgoingPayments] = useState<OutgoingPayment[]>([]);
-  useEffect(() => {
-    if (address) {
-      setOutgoingPayments(loadOutgoingPayments(address, activeChainId));
-    }
-  }, [address, activeChainId, showSendModal]);
-
-  const dustPool = useDustPool(activeChainId);
-  const [depositingToPool, setDepositingToPool] = useState(false);
-  const [poolDepositProgress, setPoolDepositProgress] = useState({ done: 0, total: 0, message: '' });
-  const depositingRef = useRef(false);
+  const [recipient, setRecipient] = useState("");
+  const [showSendInput, setShowSendInput] = useState(false);
 
   const dustName = ownedNames.length > 0 ? `${ownedNames[0].name}.dust` : null;
   const payPath = ownedNames.length > 0 ? `/pay/${ownedNames[0].name}` : "";
 
-  const { data: rawUsdcBalance, isFetching: usdcFetching } = useReadContract({
+  const { data: rawUsdcBalance, isFetching: usdcFetching, refetch: refetchUsdc } = useReadContract({
     address: FHE_CONTRACTS.mockUSDC,
     abi: MockUSDCABI,
     functionName: 'balanceOf',
@@ -66,81 +35,21 @@ function DashboardContent() {
   });
   const usdcBalance = rawUsdcBalance !== undefined ? formatUnits(rawUsdcBalance as bigint, 6) : null;
 
-  const { balance: encBalance, isLoading: encLoading } = useFHEBalance();
+  const { balance: encBalance, isLoading: encLoading, refetch: refetchEnc } = useFHEBalance();
   const encryptedUsdcBalance = encBalance !== null ? formatUnits(encBalance, 6) : null;
 
-  const unified = useUnifiedBalance({
-    payments,
-    claimAddresses,
-    refreshClaimBalances,
-    claimAddressesInitialized,
-  });
+  const { payments, isScanning, scan, error: scanError } = useFHEStealthScanner(stealthKeys, address);
 
   const handleRefresh = useCallback(() => {
+    refetchUsdc();
+    refetchEnc();
     scan();
-    refreshClaimBalances();
-    dustPool.loadPoolDeposits();
-  }, [scan, refreshClaimBalances, dustPool.loadPoolDeposits]);
+  }, [refetchUsdc, refetchEnc, scan]);
 
-  useEffect(() => {
-    if (typeof window === 'undefined' || !address) return;
-    setClaimToPool(localStorage.getItem(claimToPoolKey(address, activeChainId)) === 'true');
-  }, [address, activeChainId]);
-
-  useEffect(() => {
-    if (stealthKeys) {
-      scanInBackground();
-      return () => stopBackgroundScan();
-    }
-  }, [stealthKeys, scanInBackground, stopBackgroundScan]);
-
-  useEffect(() => {
-    if (claimToPool && stealthKeys) {
-      scan();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [claimToPool]);
-
-  const hasPoolBalance = parseFloat(dustPool.poolBalance) > 0;
-
-  const poolEligibleCount = payments.filter(p => {
-    if (p.claimed || p.keyMismatch) return false;
-    if (p.walletType !== 'create2' && p.walletType !== 'account' && p.walletType !== 'eip7702') return false;
-    const bal = parseFloat(p.balance || '0');
-    return bal > 0.0001;
-  }).length;
-
-  const handlePoolToggle = () => {
-    const next = !claimToPool;
-    setClaimToPool(next);
-    if (address) localStorage.setItem(claimToPoolKey(address, activeChainId), String(next));
-  };
-
-  const handleDepositAll = async () => {
-    if (depositingRef.current) return;
-    depositingRef.current = true;
-    setDepositingToPool(true);
-    setPoolDepositProgress({ done: 0, total: poolEligibleCount, message: 'Starting pool deposits...' });
-
-    try {
-      stopBackgroundScan();
-      const result = await depositToPool((done, total, message) => {
-        setPoolDepositProgress({ done, total, message });
-      });
-      dustPool.loadPoolDeposits();
-      if (result.deposited > 0) {
-        scan();
-      }
-      await new Promise(r => setTimeout(r, 3000));
-    } catch (err) {
-      console.error('[PoolDeposit] Unexpected error:', err);
-      setPoolDepositProgress({ done: 0, total: 0, message: 'Deposit failed — check console' });
-      await new Promise(r => setTimeout(r, 5000));
-    } finally {
-      setDepositingToPool(false);
-      depositingRef.current = false;
-      scanInBackground();
-    }
+  const handleSendNavigate = () => {
+    const name = recipient.trim().replace(/\.dust$/i, '');
+    if (!name) return;
+    router.push(`/fhe/pay/${encodeURIComponent(name)}`);
   };
 
   return (
@@ -155,15 +64,13 @@ function DashboardContent() {
           </p>
         </div>
 
-        <RestoringBanner isScanning={isScanning && payments.length === 0} />
-
         <UnifiedBalanceCard
-          total={unified.total}
-          stealthTotal={unified.stealthTotal}
-          claimTotal={unified.claimTotal}
-          unclaimedCount={unified.unclaimedCount}
+          total={0}
+          stealthTotal={0}
+          claimTotal={0}
+          unclaimedCount={payments.length}
           isScanning={isScanning}
-          isLoading={unified.isLoading}
+          isLoading={usdcFetching}
           onRefresh={handleRefresh}
           usdcBalance={usdcBalance}
           usdcLoading={usdcFetching}
@@ -173,7 +80,7 @@ function DashboardContent() {
 
         <div className="flex gap-2.5">
           <button
-            onClick={() => setShowSendModal(true)}
+            onClick={() => setShowSendInput(v => !v)}
             className="flex-1 flex items-center justify-center gap-2 py-3 rounded-sm bg-[#00FF41] hover:bg-[rgba(0,255,65,0.85)] active:scale-[0.98] transition-all font-mono font-bold text-sm text-black"
           >
             <SendIcon size={17} color="#000" />
@@ -188,42 +95,93 @@ function DashboardContent() {
           </button>
         </div>
 
-        <V2PoolCard chainId={activeChainId} />
+        {/* Send recipient input */}
+        {showSendInput && (
+          <div className="rounded-sm border border-[rgba(255,255,255,0.06)] bg-[rgba(255,255,255,0.02)] p-5 flex flex-col gap-3">
+            <label className="text-[10px] text-[rgba(255,255,255,0.4)] font-mono uppercase tracking-wider">
+              Recipient
+            </label>
+            <div className="flex gap-2">
+              <div className="flex-1 flex items-center rounded-sm border border-[rgba(255,255,255,0.1)] bg-[rgba(255,255,255,0.03)] focus-within:border-[#00FF41] transition-all">
+                <input
+                  placeholder="alice"
+                  value={recipient}
+                  onChange={(e) => setRecipient(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') handleSendNavigate(); }}
+                  className="flex-1 py-2.5 px-3 bg-transparent text-white font-mono text-sm focus:outline-none placeholder-[rgba(255,255,255,0.2)]"
+                />
+                <span className="text-[11px] text-[rgba(255,255,255,0.3)] font-mono pr-3">.dust</span>
+              </div>
+              <button
+                onClick={handleSendNavigate}
+                disabled={!recipient.trim()}
+                className={`px-4 py-2.5 rounded-sm font-mono text-[11px] font-semibold tracking-wider transition-all ${
+                  recipient.trim()
+                    ? "border border-[#00FF41]/30 bg-[#00FF41]/10 text-[#00FF41] cursor-pointer hover:bg-[#00FF41]/15 hover:border-[#00FF41]"
+                    : "border border-[rgba(255,255,255,0.06)] bg-[rgba(255,255,255,0.02)] text-[rgba(255,255,255,0.3)] cursor-not-allowed"
+                }`}
+              >
+                PAY
+              </button>
+            </div>
+          </div>
+        )}
 
-        <PrivacyPoolCard
-          claimToPool={claimToPool}
-          onToggle={handlePoolToggle}
-          poolBalance={dustPool.poolBalance}
-          depositCount={dustPool.deposits.filter(d => !d.withdrawn).length}
-          poolEligibleCount={poolEligibleCount}
-          isDepositing={depositingToPool}
-          depositProgress={poolDepositProgress}
-          onWithdraw={() => setShowConsolidateModal(true)}
-          onDepositAll={handleDepositAll}
-          symbol={chainConfig.nativeCurrency.symbol}
-        />
+        {/* Incoming FHE Payments */}
+        <div className="rounded-sm border border-[rgba(255,255,255,0.06)] bg-[rgba(255,255,255,0.02)] p-5">
+          <div className="flex justify-between items-start mb-3">
+            <span className="text-[9px] text-[rgba(255,255,255,0.5)] uppercase tracking-wider font-mono">
+              Incoming Payments
+            </span>
+            <button
+              onClick={scan}
+              disabled={isScanning}
+              className="text-[10px] text-[#00FF41] font-mono cursor-pointer bg-transparent border border-[#00FF41]/20 rounded-sm px-2 py-1 hover:bg-[#00FF41]/10 transition-all disabled:opacity-50 disabled:cursor-wait"
+            >
+              {isScanning ? "SCANNING..." : "SCAN"}
+            </button>
+          </div>
 
-        <AddressBreakdownCard
-          claimAddresses={unified.claimAddresses}
-          unclaimedPayments={unified.unclaimedPayments}
-        />
+          {isScanning && payments.length === 0 && (
+            <div className="flex items-center gap-2 py-3">
+              <div className="w-3 h-3 border-2 border-[#00FF41] border-t-transparent rounded-full animate-spin" />
+              <span className="text-[11px] text-[rgba(255,255,255,0.3)] font-mono">Scanning for incoming payments...</span>
+            </div>
+          )}
+
+          {scanError && <span className="text-[11px] text-[#ef4444] font-mono">{scanError}</span>}
+
+          {!isScanning && !scanError && payments.length === 0 && (
+            <span className="text-[11px] text-[rgba(255,255,255,0.3)] font-mono">No incoming payments found</span>
+          )}
+
+          {payments.length > 0 && (
+            <div className="flex flex-col gap-2">
+              {payments.map((payment) => (
+                <div key={payment.txHash} className="flex items-center justify-between py-2 px-3 rounded-sm border border-[rgba(255,255,255,0.04)] bg-[rgba(255,255,255,0.01)]">
+                  <div className="flex flex-col gap-0.5">
+                    <span className="text-[11px] text-white font-mono">
+                      {payment.stealthAddress.slice(0, 6)}...{payment.stealthAddress.slice(-4)}
+                    </span>
+                    <span className="text-[9px] text-[rgba(0,255,65,0.5)] font-mono">Encrypted USDC</span>
+                  </div>
+                  <a
+                    href={`https://sepolia.arbiscan.io/tx/${payment.txHash}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-[9px] text-[rgba(0,255,65,0.6)] font-mono hover:text-[#00FF41] transition-colors no-underline"
+                  >
+                    {payment.txHash.slice(0, 6)}...{payment.txHash.slice(-4)}
+                  </a>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
 
         <PersonalLinkCard ownedNames={ownedNames} metaAddress={metaAddress} isNamesSettled={isNamesSettled} />
 
-        <RecentActivityCard payments={payments} outgoingPayments={outgoingPayments} />
-
-        <SendModal isOpen={showSendModal} onClose={() => { setShowSendModal(false); scan(); }} />
         <ReceiveModal isOpen={showReceiveModal} onClose={() => setShowReceiveModal(false)} dustName={dustName} payPath={payPath} />
-        <ConsolidateModal
-          isOpen={showConsolidateModal}
-          onClose={() => setShowConsolidateModal(false)}
-          deposits={dustPool.deposits}
-          poolBalance={dustPool.poolBalance}
-          progress={dustPool.progress}
-          onConsolidate={dustPool.consolidate}
-          onReset={dustPool.resetProgress}
-          isConsolidating={dustPool.isConsolidating}
-        />
       </div>
     </div>
   );
