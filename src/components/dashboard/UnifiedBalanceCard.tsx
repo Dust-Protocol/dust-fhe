@@ -14,6 +14,10 @@ interface UnifiedBalanceCardProps {
   isScanning: boolean;
   isLoading: boolean;
   onRefresh: () => void;
+  usdcBalance?: string | null;
+  usdcLoading?: boolean;
+  encryptedUsdcBalance?: string | null;
+  encryptedUsdcLoading?: boolean;
 }
 
 export function UnifiedBalanceCard({
@@ -24,6 +28,10 @@ export function UnifiedBalanceCard({
   isScanning,
   isLoading,
   onRefresh,
+  usdcBalance,
+  usdcLoading,
+  encryptedUsdcBalance,
+  encryptedUsdcLoading,
 }: UnifiedBalanceCardProps) {
   const { activeChainId } = useAuth();
   const chainConfig = getChainConfig(activeChainId);
@@ -86,6 +94,35 @@ export function UnifiedBalanceCard({
           </span>
         </div>
       </div>
+
+      {/* USDC Balances */}
+      {(usdcBalance !== undefined || encryptedUsdcBalance !== undefined) && (
+        <div className="grid grid-cols-2 gap-4 mb-6">
+          <div className="p-3 rounded-sm border border-[rgba(255,255,255,0.04)] bg-[rgba(255,255,255,0.01)]">
+            <div className="flex items-center gap-1.5 mb-1">
+              <span className="text-[9px] text-[rgba(255,255,255,0.5)] uppercase tracking-wider font-mono">
+                USDC
+              </span>
+            </div>
+            <span className="text-sm font-bold text-white font-mono">
+              {usdcLoading ? "..." : usdcBalance ?? "0.00"}
+            </span>
+          </div>
+          <div className="p-3 rounded-sm border border-[rgba(255,255,255,0.04)] bg-[rgba(255,255,255,0.01)]">
+            <div className="flex items-center gap-1.5 mb-1">
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.4)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="3" y="11" width="18" height="11" rx="2" ry="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" />
+              </svg>
+              <span className="text-[9px] text-[rgba(255,255,255,0.5)] uppercase tracking-wider font-mono">
+                Encrypted
+              </span>
+            </div>
+            <span className="text-sm font-bold text-white font-mono">
+              {encryptedUsdcLoading ? "..." : encryptedUsdcBalance ?? "0.00"}
+            </span>
+          </div>
+        </div>
+      )}
 
       {unclaimedCount > 0 && (
         <div className="flex justify-center">

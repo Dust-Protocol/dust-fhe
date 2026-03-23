@@ -19,6 +19,10 @@ import { loadOutgoingPayments } from '@/hooks/stealth/useStealthSend';
 import { storageKey } from '@/lib/storageKey';
 import { RestoringBanner } from '@/components/RestoringBanner';
 import type { OutgoingPayment } from '@/lib/design/types';
+import { useReadContract } from 'wagmi';
+import { formatUnits } from 'viem';
+import { FHE_CONTRACTS, MockUSDCABI, FHE_CHAIN_ID } from '@/lib/fhe';
+import { useFHEBalance } from '@/hooks/fhe';
 
 const FHEProviderWrapper = dynamic(() => import("@/app/fhe/FHEProviderWrapper"), { ssr: false });
 
@@ -52,6 +56,18 @@ function DashboardContent() {
 
   const dustName = ownedNames.length > 0 ? `${ownedNames[0].name}.dust` : null;
   const payPath = ownedNames.length > 0 ? `/pay/${ownedNames[0].name}` : "";
+
+  const { data: rawUsdcBalance, isFetching: usdcFetching } = useReadContract({
+    address: FHE_CONTRACTS.mockUSDC,
+    abi: MockUSDCABI,
+    functionName: 'balanceOf',
+    args: address ? [address] : undefined,
+    chainId: FHE_CHAIN_ID,
+  });
+  const usdcBalance = rawUsdcBalance !== undefined ? formatUnits(rawUsdcBalance as bigint, 6) : null;
+
+  const { balance: encBalance, isLoading: encLoading } = useFHEBalance();
+  const encryptedUsdcBalance = encBalance !== null ? formatUnits(encBalance, 6) : null;
 
   const unified = useUnifiedBalance({
     payments,
@@ -149,6 +165,10 @@ function DashboardContent() {
           isScanning={isScanning}
           isLoading={unified.isLoading}
           onRefresh={handleRefresh}
+          usdcBalance={usdcBalance}
+          usdcLoading={usdcFetching}
+          encryptedUsdcBalance={encryptedUsdcBalance}
+          encryptedUsdcLoading={encLoading}
         />
 
         <div className="flex gap-2.5">
