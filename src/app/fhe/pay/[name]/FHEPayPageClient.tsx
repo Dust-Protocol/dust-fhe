@@ -283,7 +283,7 @@ function InputView({
         </label>
         <div className="flex items-center gap-2 px-3 py-2.5 rounded-sm border border-[rgba(255,255,255,0.1)] bg-[rgba(255,255,255,0.03)]">
           <span className="text-xs text-white font-mono font-medium">Arbitrum Sepolia</span>
-          <span className="text-[10px] text-[rgba(255,255,255,0.3)] ml-auto">ETH</span>
+          <span className="text-[10px] text-[rgba(255,255,255,0.3)] ml-auto">USDC</span>
         </div>
       </div>
 
@@ -488,6 +488,12 @@ function SuccessView({
           </div>
         </a>
       )}
+
+      <Link href="/dashboard" className="no-underline w-full">
+        <button className="w-full py-3 rounded-sm border border-[rgba(255,255,255,0.08)] bg-[rgba(255,255,255,0.03)] text-[rgba(255,255,255,0.5)] font-mono text-[11px] tracking-wider cursor-pointer hover:border-[rgba(255,255,255,0.2)] hover:text-[rgba(255,255,255,0.7)] transition-all">
+          BACK TO DASHBOARD
+        </button>
+      </Link>
 
       <button
         onClick={onSendAnother}
