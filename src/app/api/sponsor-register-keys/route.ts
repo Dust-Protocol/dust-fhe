@@ -66,7 +66,7 @@ export async function POST(req: Request) {
       ? '0x' + (metaAddress.match(/st:[a-z]+:0x([0-9a-fA-F]+)/)?.[1] || '')
       : metaAddress.startsWith('0x') ? metaAddress : '0x' + metaAddress;
 
-    if (!metaBytes || metaBytes === '0x') {
+    if (!metaBytes || metaBytes === '0x' || !isValidHex(metaBytes)) {
       return NextResponse.json({ error: 'Invalid meta-address' }, { status: 400 });
     }
 

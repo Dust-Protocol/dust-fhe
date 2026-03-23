@@ -78,6 +78,10 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400, headers: NO_STORE });
     }
 
+    if (!/^0x[0-9a-fA-F]{40}$/.test(stealthAddress)) {
+      return NextResponse.json({ error: 'Invalid stealth address' }, { status: 400, headers: NO_STORE });
+    }
+
     if (!checkCooldown(stealthAddress.toLowerCase())) {
       return NextResponse.json({ error: 'Please wait before trying again' }, { status: 429, headers: NO_STORE });
     }
@@ -89,6 +93,9 @@ export async function POST(req: Request) {
       const { drainTo, drainSig } = body;
       if (!drainTo || !drainSig) {
         return NextResponse.json({ error: 'Missing drain fields' }, { status: 400, headers: NO_STORE });
+      }
+      if (!/^0x[0-9a-fA-F]{40}$/.test(drainTo)) {
+        return NextResponse.json({ error: 'Invalid drain address' }, { status: 400, headers: NO_STORE });
       }
       const calldata = encodeFunctionData({
         abi: [{
@@ -123,6 +130,9 @@ export async function POST(req: Request) {
       const { initializeOwner, initializeSig } = body;
       if (!initializeOwner || !initializeSig) {
         return NextResponse.json({ error: 'Missing initialize fields' }, { status: 400, headers: NO_STORE });
+      }
+      if (!/^0x[0-9a-fA-F]{40}$/.test(initializeOwner)) {
+        return NextResponse.json({ error: 'Invalid owner address' }, { status: 400, headers: NO_STORE });
       }
       const calldata = encodeFunctionData({
         abi: [{
