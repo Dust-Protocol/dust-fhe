@@ -53,7 +53,7 @@ export function UnifiedBalanceCard({
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.3 }}
-      className="w-full p-6 rounded-sm border border-[rgba(255,255,255,0.06)] bg-[rgba(255,255,255,0.02)] backdrop-blur-sm relative overflow-hidden group"
+      className="w-full p-6 rounded-sm border border-[rgba(255,255,255,0.12)] bg-[rgba(255,255,255,0.04)] backdrop-blur-sm relative overflow-hidden group"
     >
       <div className="flex justify-between items-center mb-4">
         <div className="flex items-center gap-2">
@@ -83,7 +83,7 @@ export function UnifiedBalanceCard({
 
       <div className="grid grid-cols-2 gap-4 mb-6">
         {/* Available USDC (plain) */}
-        <div className="p-3 rounded-sm border border-[rgba(255,255,255,0.04)] bg-[rgba(255,255,255,0.01)]">
+        <div className="p-3 rounded-sm border border-[rgba(255,255,255,0.10)] bg-[rgba(255,255,255,0.03)]">
           <div className="flex items-center gap-1.5 mb-1">
             <CheckIcon className="w-3 h-3 text-[rgba(255,255,255,0.4)]" />
             <span className="text-[9px] text-[rgba(255,255,255,0.5)] uppercase tracking-wider font-mono">
@@ -95,7 +95,7 @@ export function UnifiedBalanceCard({
           </span>
         </div>
         {/* Encrypted USDC (in ConfidentialToken) */}
-        <div className="p-3 rounded-sm border border-[rgba(255,255,255,0.04)] bg-[rgba(255,255,255,0.01)]">
+        <div className="p-3 rounded-sm border border-[rgba(255,255,255,0.10)] bg-[rgba(255,255,255,0.03)]">
           <div className="flex items-center gap-1.5 mb-1">
             <LockIcon className="w-3 h-3 text-[rgba(255,255,255,0.4)]" />
             <span className="text-[9px] text-[rgba(255,255,255,0.5)] uppercase tracking-wider font-mono">
@@ -111,7 +111,7 @@ export function UnifiedBalanceCard({
       {/* Secondary: ETH stealth balances */}
       {(stealthTotal > 0 || claimTotal > 0) && (
         <div className="grid grid-cols-2 gap-4 mb-6">
-          <div className="p-3 rounded-sm border border-[rgba(255,255,255,0.04)] bg-[rgba(255,255,255,0.01)]">
+          <div className="p-3 rounded-sm border border-[rgba(255,255,255,0.10)] bg-[rgba(255,255,255,0.03)]">
             <div className="flex items-center gap-1.5 mb-1">
               <EyeOffIcon className="w-3 h-3 text-[rgba(255,255,255,0.4)]" />
               <span className="text-[9px] text-[rgba(255,255,255,0.5)] uppercase tracking-wider font-mono">
@@ -122,7 +122,7 @@ export function UnifiedBalanceCard({
               {stealthTotal.toFixed(4)} <ETHIcon size={14} /> {symbol}
             </span>
           </div>
-          <div className="p-3 rounded-sm border border-[rgba(255,255,255,0.04)] bg-[rgba(255,255,255,0.01)]">
+          <div className="p-3 rounded-sm border border-[rgba(255,255,255,0.10)] bg-[rgba(255,255,255,0.03)]">
             <div className="flex items-center gap-1.5 mb-1">
               <CheckIcon className="w-3 h-3 text-[rgba(255,255,255,0.4)]" />
               <span className="text-[9px] text-[rgba(255,255,255,0.5)] uppercase tracking-wider font-mono">
@@ -148,10 +148,10 @@ export function UnifiedBalanceCard({
       )}
 
       {/* Corner accents */}
-      <div className="absolute top-0 left-0 w-2 h-2 border-t border-l border-[rgba(255,255,255,0.1)] rounded-tl-sm" />
-      <div className="absolute top-0 right-0 w-2 h-2 border-t border-r border-[rgba(255,255,255,0.1)] rounded-tr-sm" />
-      <div className="absolute bottom-0 left-0 w-2 h-2 border-b border-l border-[rgba(255,255,255,0.1)] rounded-bl-sm" />
-      <div className="absolute bottom-0 right-0 w-2 h-2 border-b border-r border-[rgba(255,255,255,0.1)] rounded-br-sm" />
+      <div className="absolute top-0 left-0 w-2 h-2 border-t border-l border-[rgba(255,255,255,0.15)] rounded-tl-sm" />
+      <div className="absolute top-0 right-0 w-2 h-2 border-t border-r border-[rgba(255,255,255,0.15)] rounded-tr-sm" />
+      <div className="absolute bottom-0 left-0 w-2 h-2 border-b border-l border-[rgba(255,255,255,0.15)] rounded-bl-sm" />
+      <div className="absolute bottom-0 right-0 w-2 h-2 border-b border-r border-[rgba(255,255,255,0.15)] rounded-br-sm" />
     </motion.div>
   );
 }
