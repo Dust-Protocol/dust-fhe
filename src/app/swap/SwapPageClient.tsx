@@ -5,6 +5,7 @@ import { PoolStats } from "@/components/swap/PoolStats";
 import { PoolComposition } from "@/components/swap/PoolComposition";
 import { usePoolStats } from "@/hooks/swap/usePoolStats";
 import { useChainlinkPrice } from "@/hooks/swap/useChainlinkPrice";
+import { ComingSoonOverlay } from "@/components/ComingSoonOverlay";
 
 export default function SwapPageClient() {
   const {
@@ -39,7 +40,7 @@ export default function SwapPageClient() {
   };
 
   return (
-    <div className="w-full flex flex-col items-center gap-2 px-6 pb-12 pt-8">
+    <div className="relative w-full flex flex-col items-center gap-2 px-6 pb-12 pt-8">
       {/* Header */}
       <div className="text-center mb-6">
         <h1 className="text-3xl md:text-4xl font-bold tracking-widest text-white font-mono mb-2">
@@ -78,6 +79,8 @@ export default function SwapPageClient() {
           currentPrice={oraclePrice}
         />
       </div>
+
+      <ComingSoonOverlay message="Private swaps are under development and will be available shortly." />
     </div>
   );
 }

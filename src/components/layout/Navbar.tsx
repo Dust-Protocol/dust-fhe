@@ -44,7 +44,6 @@ const navItems = [
   { href: "/dashboard", label: "Dashboard" },
   { href: "/swap", label: "Swap" },
   { href: "/pools", label: "Shield" },
-  { href: "/fhe/dashboard", label: "FHE" },
   { href: "/wallet", label: "Wallet" },
   { href: "/links", label: "Links" },
   { href: "/activities", label: "Activity" },
@@ -54,7 +53,6 @@ const navItems = [
 
 function isNavActive(itemHref: string, pathname: string) {
   if (itemHref === "/docs") return pathname.startsWith("/docs");
-  if (itemHref === "/fhe/dashboard") return pathname.startsWith("/fhe");
   return pathname === itemHref;
 }
 

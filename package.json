@@ -12,6 +12,13 @@
     "test:watch": "vitest --watch"
   },
   "dependencies": {
+    "@cofhe/abi": "^0.4.0",
+    "@cofhe/react": "^0.4.0",
+    "@cofhe/sdk": "^0.4.0",
+    "@emotion/react": "^11.14.0",
+    "@emotion/styled": "^11.14.1",
+    "@mui/icons-material": "^7.3.9",
+    "@mui/material": "^7.3.9",
     "@noble/hashes": "^1.7.1",
     "@noble/secp256k1": "^2.2.3",
     "@privy-io/react-auth": "^3.13.1",

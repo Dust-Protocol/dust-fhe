@@ -186,7 +186,7 @@ export default function FHEPayPageClient({ name }: { name: string }) {
 
             {/* Footer */}
             <div className="flex justify-center pt-1">
-              <Link href="/fhe/dashboard" className="no-underline">
+              <Link href="/dashboard" className="no-underline">
                 <span className="text-[11px] text-[rgba(255,255,255,0.25)] font-mono cursor-pointer hover:text-[rgba(255,255,255,0.5)] transition-colors">
                   Pay someone else
                 </span>

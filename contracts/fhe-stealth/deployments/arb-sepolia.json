@@ -1,0 +1,12 @@
+{
+  "network": "arb-sepolia",
+  "chainId": 421614,
+  "deployer": "0x8d56E94a02F06320BDc68FAfE23DEc9Ad7463496",
+  "deployedAt": "2026-03-20T18:48:51.761Z",
+  "contracts": {
+    "MockUSDC": "0xdD58339deD3efcF2Ddd1bf06045cF4A74ED472b7",
+    "ConfidentialToken": "0xD8fc2100EDB4E26C963cbC5BCe2ec717b2bB6661",
+    "FHENameRegistry": "0x31DdFEB4Fc83a248E8CD48991c4C8E68EB96B537",
+    "FHEStealthTransfer": "0x6839919dE260F1023b14BEe365D80390F6bA53f5"
+  }
+}
