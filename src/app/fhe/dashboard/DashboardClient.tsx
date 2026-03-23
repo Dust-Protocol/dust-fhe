@@ -3,8 +3,9 @@
 import React from "react";
 import { useAccount, useConnect, useChainId, useSwitchChain } from "wagmi";
 import { injected } from "wagmi/connectors";
-import { useFHEInit, useFHEBalance } from "@/hooks/fhe";
+import { useFHEInit, useFHEBalance, useFHEStealthScanner } from "@/hooks/fhe";
 import { FHE_CHAIN_ID } from "@/lib/fhe";
+import { useAuth } from "@/contexts/AuthContext";
 import { DustLogo } from "@/components/DustLogo";
 import Link from "next/link";
 import { formatUnits } from "viem";
@@ -14,8 +15,10 @@ export default function DashboardClient() {
   const { connect } = useConnect();
   const chainId = useChainId();
   const { switchChain } = useSwitchChain();
+  const { stealthKeys } = useAuth();
   const { state: fheState } = useFHEInit();
   const { balance, isLoading: balanceLoading, error: balanceError, needsPermit, refetch } = useFHEBalance();
+  const { payments, isScanning, scan, error: scanError } = useFHEStealthScanner(stealthKeys, address);
 
   const chainMismatch = isConnected && chainId !== FHE_CHAIN_ID;
 
@@ -131,6 +134,69 @@ export default function DashboardClient() {
                     <span className="text-[10px] text-[rgba(255,255,255,0.3)] font-mono">
                       Connecting to CoFHE network...
                     </span>
+                  </div>
+                )}
+              </div>
+
+              {/* Recent Payments */}
+              <div className="rounded-md border border-[rgba(255,255,255,0.1)] bg-[#06080F] p-6">
+                <div className="flex justify-between items-start mb-4">
+                  <span className="text-[10px] text-[rgba(255,255,255,0.4)] font-mono uppercase tracking-wider">
+                    Recent Payments
+                  </span>
+                  <button
+                    onClick={scan}
+                    disabled={isScanning}
+                    className="text-[10px] text-purple-400 font-mono cursor-pointer bg-transparent border border-purple-500/20 rounded-sm px-2 py-1 hover:bg-purple-500/10 transition-all disabled:opacity-50 disabled:cursor-wait"
+                  >
+                    {isScanning ? "SCANNING..." : "SCAN"}
+                  </button>
+                </div>
+
+                {isScanning && payments.length === 0 && (
+                  <div className="flex items-center gap-2 py-3">
+                    <div className="w-3 h-3 border-2 border-purple-400 border-t-transparent rounded-full animate-spin" />
+                    <span className="text-[11px] text-[rgba(255,255,255,0.3)] font-mono">
+                      Scanning for incoming payments...
+                    </span>
+                  </div>
+                )}
+
+                {scanError && (
+                  <span className="text-[11px] text-[#ef4444] font-mono">{scanError}</span>
+                )}
+
+                {!isScanning && !scanError && payments.length === 0 && (
+                  <span className="text-[11px] text-[rgba(255,255,255,0.3)] font-mono">
+                    No incoming payments found
+                  </span>
+                )}
+
+                {payments.length > 0 && (
+                  <div className="flex flex-col gap-2">
+                    {payments.map((payment) => (
+                      <div
+                        key={payment.txHash}
+                        className="flex items-center justify-between py-2 px-3 rounded-sm border border-[rgba(255,255,255,0.06)] bg-[rgba(255,255,255,0.02)]"
+                      >
+                        <div className="flex flex-col gap-0.5">
+                          <span className="text-[11px] text-white font-mono">
+                            {payment.stealthAddress.slice(0, 6)}...{payment.stealthAddress.slice(-4)}
+                          </span>
+                          <span className="text-[9px] text-purple-400/60 font-mono">
+                            Encrypted cUSDC
+                          </span>
+                        </div>
+                        <a
+                          href={`https://sepolia.arbiscan.io/tx/${payment.txHash}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-[9px] text-purple-400 font-mono hover:text-purple-300 transition-colors no-underline"
+                        >
+                          {payment.txHash.slice(0, 6)}...{payment.txHash.slice(-4)}
+                        </a>
+                      </div>
+                    ))}
                   </div>
                 )}
               </div>
