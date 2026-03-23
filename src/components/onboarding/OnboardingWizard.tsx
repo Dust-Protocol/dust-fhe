@@ -30,6 +30,8 @@ export function OnboardingWizard() {
   const [error, setError] = useState<string | null>(null);
   const [metaRegWarning, setMetaRegWarning] = useState<string | null>(null);
   const activatingRef = useRef(false);
+  const ownedNamesRef = useRef(ownedNames);
+  ownedNamesRef.current = ownedNames;
 
   // If names load after mount (async) and we haven't moved yet, jump to pin
   useEffect(() => {
@@ -63,6 +65,7 @@ export function OnboardingWizard() {
     activatingRef.current = true;
     setStep("activating");
     setError(null);
+    setMetaRegWarning(null);
 
     try {
       const result = await deriveKeysFromWallet(pin);
@@ -74,7 +77,7 @@ export function OnboardingWizard() {
       // Re-check ownedNames at activation time — names may have loaded asynchronously
       // after the wizard first rendered (cleared cache / new browser). In that case
       // isReactivation (captured at render) could be stale.
-      const alreadyHasName = ownedNames.length > 0;
+      const alreadyHasName = ownedNamesRef.current.length > 0;
 
       // Track locally — setMetaRegWarning won't update the closure variable
       let hasMetaWarning = false;
@@ -96,8 +99,11 @@ export function OnboardingWizard() {
           const reclaimData = await reclaimRes.json();
           if (reclaimData.name) {
             setUsername(reclaimData.name);
-            // Re-register ERC-6538 meta-address in background with retry
-            tryRegisterMeta();
+            const metaOk = await tryRegisterMeta();
+            if (!metaOk) {
+              hasMetaWarning = true;
+              setMetaRegWarning("Account reclaimed, but stealth keys couldn't be registered on-chain.");
+            }
           } else {
             // No name found — this wallet hasn't registered a name before
             throw new Error("No existing account found — please go back and create a new username");
@@ -108,11 +114,10 @@ export function OnboardingWizard() {
       } else {
         // Fresh onboarding — register the chosen name on-chain.
         // registerName returns the txHash string, or 'already-registered' for idempotent re-reg.
-        const [nameTx, metaOk] = await Promise.all([
-          registerName(username, result.metaAddress),
-          tryRegisterMeta(),
-        ]);
+        const nameTx = await registerName(username, result.metaAddress);
         if (!nameTx) throw new Error("Failed to register name");
+
+        const metaOk = await tryRegisterMeta();
         if (!metaOk) {
           hasMetaWarning = true;
           setMetaRegWarning("Account created, but stealth keys couldn't be registered on-chain. Your account may not be discoverable from other devices.");
@@ -132,7 +137,8 @@ export function OnboardingWizard() {
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Activation failed";
       setError(msg);
-      setStep(isReclaiming ? "pin" : "pin");
+      setStep(isReclaiming ? "pin" : "username");
+    } finally {
       activatingRef.current = false;
     }
   };
