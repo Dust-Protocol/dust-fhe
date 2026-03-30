@@ -109,7 +109,8 @@ export function useFHEStealthClaim(): UseFHEStealthClaimResult {
         args: [stealthAddress as `0x${string}`],
       });
 
-      if (!ctHash || BigInt(ctHash as any) === 0n) {
+      const ctHashBigInt = BigInt(ctHash as bigint);
+      if (!ctHash || ctHashBigInt === 0n) {
         throw new Error('No encrypted balance at stealth address');
       }
 
@@ -125,21 +126,23 @@ export function useFHEStealthClaim(): UseFHEStealthClaimResult {
         stealthWalletClient as any,
       );
 
-      // Create a self-permit for the stealth address
+      // Create a self-permit for the stealth address (normalize to checksummed form)
+      const { getAddress } = await import('viem');
+      const normalizedStealth = getAddress(stealthAddress);
       const permit = await stealthCofheClient.permits.getOrCreateSelfPermit(
         arbitrumSepolia.id,
-        stealthAddress,
+        normalizedStealth,
       );
 
       // Decrypt the balance
       const plaintextAmount = await stealthCofheClient.decryptForView(
-        BigInt(ctHash as any),
+        ctHashBigInt,
         FheTypes.Uint64,
       )
         .withPermit(permit)
         .execute();
 
-      const amount = BigInt(plaintextAmount as any);
+      const amount = BigInt(plaintextAmount as bigint);
 
       if (amount <= 0n) {
         stealthCofheClient.disconnect();
