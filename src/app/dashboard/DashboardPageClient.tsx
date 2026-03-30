@@ -52,8 +52,9 @@ function DashboardContent() {
     address: FHE_CONTRACTS.mockUSDC,
     abi: MockUSDCABI,
     functionName: 'balanceOf',
-    args: address ? [address as `0x${string}`] : undefined,
+    args: [address as `0x${string}`],
     chainId: FHE_CHAIN_ID,
+    query: { enabled: !!address },
   });
   const usdcBalance = rawUsdcBalance !== undefined ? formatUnits(rawUsdcBalance as bigint, 6) : null;
 

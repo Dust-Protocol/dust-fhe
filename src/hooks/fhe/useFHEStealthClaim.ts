@@ -1,6 +1,5 @@
 import { useState, useCallback, useRef } from 'react';
 import { useAccount } from 'wagmi';
-import { useCofheEncrypt } from '@cofhe/react';
 import { Encryptable, FheTypes } from '@cofhe/sdk';
 import type { EncryptedItemInput } from '@cofhe/sdk';
 import { createCofheClient, createCofheConfig } from '@cofhe/sdk/web';
@@ -43,7 +42,6 @@ function encryptedInputToContractArg(input: EncryptedItemInput): { data: `0x${st
 
 export function useFHEStealthClaim(): UseFHEStealthClaimResult {
   const { address: mainAddress } = useAccount();
-  const { encryptInputsAsync } = useCofheEncrypt();
   const [step, setStep] = useState<ClaimStep>('idle');
   const [error, setError] = useState<string | null>(null);
   const [txHash, setTxHash] = useState<string | null>(null);
@@ -138,23 +136,23 @@ export function useFHEStealthClaim(): UseFHEStealthClaimResult {
         BigInt(ctHash as any),
         FheTypes.Uint64,
       )
-        .withPermit()
+        .withPermit(permit)
         .execute();
 
       const amount = BigInt(plaintextAmount as any);
 
-      // Disconnect stealth client
-      stealthCofheClient.disconnect();
-
       if (amount <= 0n) {
+        stealthCofheClient.disconnect();
         throw new Error('Stealth balance is zero');
       }
 
-      // Step 3: Re-encrypt the known amount with the main wallet's CoFHE context
-      // confidentialTransfer requires a fresh InEuint64 (client-encrypted with ZK proof)
+      // Step 3: Re-encrypt with the stealth wallet's CoFHE context
+      // The ZK proof must match the wallet that signs the tx (stealth wallet)
       setStep('encrypting');
-      const encResult = await encryptInputsAsync([Encryptable.uint64(amount)]);
+      const encResult = await stealthCofheClient.encryptInputs([Encryptable.uint64(amount)]).execute();
       const encAmount = encResult[0];
+
+      stealthCofheClient.disconnect();
 
       // Step 4: Send confidentialTransfer from stealth wallet → main address
       setStep('transferring');
@@ -188,7 +186,7 @@ export function useFHEStealthClaim(): UseFHEStealthClaimResult {
     } finally {
       claimingRef.current = false;
     }
-  }, [mainAddress, encryptInputsAsync]);
+  }, [mainAddress]);
 
   return {
     claim,

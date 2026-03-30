@@ -1,11 +1,14 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { ethers } from 'ethers';
 import type { StealthKeyPair } from '@/lib/stealth/types';
 import { scanFHEStealthTransfers, type FHEStealthPayment } from '@/lib/fhe/scanner';
 import { storageKey } from '@/lib/storageKey';
 import { FHE_CHAIN_ID } from '@/lib/fhe';
 
+const ARB_SEPOLIA_RPC = 'https://sepolia-rollup.arbitrum.io/rpc';
+
 // FHE contract deployed recently — no events exist before this block
-const DEPLOYMENT_BLOCK = 0;
+const DEPLOYMENT_BLOCK = 246396709;
 
 const STORAGE_PREFIX = 'fhe_scanner';
 
@@ -67,7 +70,10 @@ export function useFHEStealthScanner(stealthKeys: StealthKeyPair | null, walletA
       const lastBlock = loadLastBlock(walletAddress);
       const fromBlock = lastBlock !== null ? lastBlock + 1 : DEPLOYMENT_BLOCK;
 
-      const newPayments = await scanFHEStealthTransfers(stealthKeys, fromBlock, 'latest');
+      const provider = new ethers.providers.JsonRpcProvider(ARB_SEPOLIA_RPC);
+      const latestBlock = await provider.getBlockNumber();
+
+      const newPayments = await scanFHEStealthTransfers(stealthKeys, fromBlock, latestBlock, provider);
 
       setPayments(prev => {
         const existingTxHashes = new Set(prev.map(p => p.txHash));
@@ -78,11 +84,7 @@ export function useFHEStealthScanner(stealthKeys: StealthKeyPair | null, walletA
         return merged;
       });
 
-      // Persist the latest scanned block from results or current latest
-      if (newPayments.length > 0) {
-        const maxBlock = Math.max(...newPayments.map(p => p.blockNumber));
-        saveLastBlock(walletAddress, maxBlock);
-      }
+      saveLastBlock(walletAddress, latestBlock);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Scan failed';
       setError(message);

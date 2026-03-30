@@ -19,6 +19,6 @@ export function useFHEBalance() {
     isLoading: encrypted.isFetching || decrypted.isFetching,
     needsPermit: disabledDueToMissingPermit,
     error: encrypted.error?.message ?? decrypted.error?.message ?? null,
-    refetch: useCallback(() => { void encrypted.refetch(); }, [encrypted.refetch]),
+    refetch: useCallback(() => { void encrypted.refetch(); void decrypted.refetch(); }, [encrypted.refetch, decrypted.refetch]),
   };
 }

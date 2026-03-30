@@ -156,7 +156,7 @@ export function OnboardingWizard() {
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Activation failed";
       setError(msg);
-      setStep(isReclaiming ? "pin" : "username");
+      setStep(isReclaiming || ownedNamesRef.current.length > 0 ? "pin" : "username");
     } finally {
       activatingRef.current = false;
     }

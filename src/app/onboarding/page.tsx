@@ -27,7 +27,13 @@ export default function OnboardingPage() {
 
   // Also gate on isOnboarded so the wizard never renders for users who are already onboarded
   // (e.g. cleared cache / new browser — names settled and found → isOnboarded is true, redirect pending)
-  if (!isConnected || !isHydrated || !isNamesSettled || isOnboarded) return null;
+  if (!isConnected || !isHydrated || !isNamesSettled || isOnboarded) {
+    return (
+      <div className="min-h-screen bg-[#06080F] flex items-center justify-center">
+        <div className="w-6 h-6 border-2 border-[#00FF41] border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
 
   return (
     <>

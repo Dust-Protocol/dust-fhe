@@ -159,7 +159,7 @@ export function useFHEStealthSend(): UseFHEStealthSendResult {
         abi: FHEStealthTransferABI,
         functionName: 'stealthSend',
         args: [
-          generated.stealthAddress as Address,
+          generated.stealthEOAAddress as Address,
           encryptedInputToContractArg(encAmount),
           ephPubKey,
           viewTagBytes,
