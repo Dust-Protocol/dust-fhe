@@ -113,8 +113,12 @@ export function useFHEStealthSend(): UseFHEStealthSendResult {
           functionName: 'approve',
           args: [FHE_CONTRACTS.confidentialToken, amountParsed],
         });
-        await publicClient.waitForTransactionReceipt({ hash: approveHash });
+        const approveReceipt = await publicClient.waitForTransactionReceipt({ hash: approveHash });
+        if (approveReceipt.status === 'reverted') throw new Error('USDC approval reverted');
       }
+
+      const MAX_UINT64 = 18446744073709551615n;
+      if (amountParsed > MAX_UINT64) throw new Error('Amount exceeds maximum');
 
       setStep('depositing');
       const depositHash = await walletClient.writeContract({
@@ -147,7 +151,8 @@ export function useFHEStealthSend(): UseFHEStealthSendResult {
           functionName: 'approve',
           args: [FHE_CONTRACTS.stealthTransfer, true],
         });
-        await publicClient.waitForTransactionReceipt({ hash: approveCtHash });
+        const ctApproveReceipt = await publicClient.waitForTransactionReceipt({ hash: approveCtHash });
+        if (ctApproveReceipt.status === 'reverted') throw new Error('Token approval reverted');
       }
 
       setStep('sending');

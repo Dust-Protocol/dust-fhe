@@ -76,6 +76,8 @@ function DashboardContent() {
     if (isApproveSuccess && !depositTriggeredRef.current && depositAmount) {
       depositTriggeredRef.current = true;
       const amt = parseUnits(depositAmount, 6);
+      const MAX_UINT64 = 18446744073709551615n;
+      if (amt > MAX_UINT64) throw new Error('Amount exceeds maximum');
       writeDeposit({
         address: FHE_CONTRACTS.confidentialToken,
         abi: ConfidentialTokenABI,

@@ -5,13 +5,14 @@ import { ethers } from 'ethers';
 export const NAME_SUFFIX = '.dust';
 
 const NAME_REGISTRY_ABI = [
-  'function registerName(string calldata name, bytes calldata stealthMetaAddress) external',
-  'function resolveName(string calldata name) external view returns (bytes)',
-  'function updateMetaAddress(string calldata name, bytes calldata newMetaAddress) external',
+  'function registerName(string calldata name, bytes calldata spendingPubKey, bytes calldata viewingPubKey) external payable',
+  'function resolveName(string calldata name) external view returns (bytes memory spendingPubKey, bytes memory viewingPubKey)',
+  'function updateMetaAddress(string calldata name, bytes calldata spendingPubKey, bytes calldata viewingPubKey) external',
   'function transferName(string calldata name, address newOwner) external',
   'function isNameAvailable(string calldata name) external view returns (bool)',
-  'function getOwner(string calldata name) external view returns (address)',
-  'function getNamesOwnedBy(address owner) external view returns (string[] memory)',
+  'function nameOwners(bytes32 nameHash) external view returns (address)',
+  'function primaryNames(address owner) external view returns (bytes32)',
+  'function registrationFee() external view returns (uint256)',
 ];
 
 let registryAddress = '';
@@ -218,7 +219,10 @@ export async function registerStealthName(signer: ethers.Signer, name: string, m
   if (!isValidName(normalized)) throw new Error('Invalid name');
 
   const registry = getRegistry(signer);
-  const tx = await registry.registerName(normalized, toBytes(metaAddress));
+  const metaHex = metaAddress.replace(/^st:[a-z]+:0x/, '');
+  const spendingPubKey = '0x' + metaHex.slice(0, 66);
+  const viewingPubKey = '0x' + metaHex.slice(66, 132);
+  const tx = await registry.registerName(normalized, spendingPubKey, viewingPubKey, { value: 0 });
   return (await tx.wait()).transactionHash;
 }
 
@@ -251,8 +255,10 @@ async function resolveOnChain(chainId: number | undefined, stripped: string): Pr
     if (!addr) return null;
     const rpcProvider = getReadOnlyProvider(effectiveChainId);
     const registry = new ethers.Contract(addr, NAME_REGISTRY_ABI, rpcProvider);
-    const result = await registry.resolveName(stripped);
-    return result && result !== '0x' && result.length > 4 ? result : null;
+    const [spendingPubKey, viewingPubKey] = await registry.resolveName(stripped);
+    if (!spendingPubKey || spendingPubKey === '0x' || !viewingPubKey || viewingPubKey === '0x') return null;
+    const combined = spendingPubKey.replace(/^0x/, '') + viewingPubKey.replace(/^0x/, '');
+    return 'st:eth:0x' + combined;
   } catch {
     return null;
   }
@@ -289,7 +295,8 @@ export async function getNameOwner(_provider: ethers.providers.Provider | null, 
     if (!addr) return null;
     const rpcProvider = getReadOnlyProvider(effectiveChainId);
     const registry = new ethers.Contract(addr, NAME_REGISTRY_ABI, rpcProvider);
-    const owner = await registry.getOwner(stripNameSuffix(name));
+    const nameHash = ethers.utils.keccak256(ethers.utils.toUtf8Bytes(stripNameSuffix(name).toLowerCase()));
+    const owner = await registry.nameOwners(nameHash);
     return owner === ethers.constants.AddressZero ? null : owner;
   } catch (e) {
     console.error('[names] getNameOwner error:', e);
@@ -308,22 +315,17 @@ export async function getNamesOwnedBy(_provider: ethers.providers.Provider | nul
   return getNamesOnChain(undefined, address);
 }
 
-async function getNamesOnChain(chainId: number | undefined, address: string): Promise<string[]> {
-  try {
-    const effectiveChainId = getEffectiveNamingChainId(chainId);
-    const addr = getNameRegistryForChain(effectiveChainId);
-    if (!addr) return [];
-    const rpcProvider = getReadOnlyProvider(effectiveChainId);
-    const registry = new ethers.Contract(addr, NAME_REGISTRY_ABI, rpcProvider);
-    return await registry.getNamesOwnedBy(address);
-  } catch {
-    return [];
-  }
+async function getNamesOnChain(_chainId: number | undefined, _address: string): Promise<string[]> {
+  // FHE NameRegistry has no enumeration function — cannot list names by owner
+  return [];
 }
 
 export async function updateNameMetaAddress(signer: ethers.Signer, name: string, newMetaAddress: string): Promise<string> {
   const registry = getRegistry(signer);
-  const tx = await registry.updateMetaAddress(stripNameSuffix(name), toBytes(newMetaAddress));
+  const metaHex = newMetaAddress.replace(/^st:[a-z]+:0x/, '');
+  const spendingPubKey = '0x' + metaHex.slice(0, 66);
+  const viewingPubKey = '0x' + metaHex.slice(66, 132);
+  const tx = await registry.updateMetaAddress(stripNameSuffix(name), spendingPubKey, viewingPubKey);
   return (await tx.wait()).transactionHash;
 }
 
@@ -372,35 +374,9 @@ export async function discoverNameByMetaAddress(
 /**
  * Check a single chain's name registry for a deployer-owned name matching the target meta-address.
  */
-async function discoverNameOnChain(chainId: number, chainName: string, targetHex: string): Promise<string | null> {
-  const addr = getNameRegistryForChain(chainId);
-  if (!addr) return null;
-
-  try {
-    const rpcProvider = getReadOnlyProvider(chainId);
-    const registry = new ethers.Contract(addr, NAME_REGISTRY_ABI, rpcProvider);
-    const deployerNames: string[] = await registry.getNamesOwnedBy(DEPLOYER);
-
-    let bestMatch: string | null = null;
-    for (const name of deployerNames) {
-      try {
-        const resolved: string = await registry.resolveName(name);
-        if (resolved && resolved.toLowerCase() === targetHex.toLowerCase()) {
-          if (!bestMatch || name.length < bestMatch.length) {
-            bestMatch = name;
-          }
-        }
-      } catch { continue; }
-    }
-
-    if (bestMatch) {
-      console.log(`[names] Discovered name "${bestMatch}" on ${chainName} (${chainId})`);
-    }
-    return bestMatch;
-  } catch (e) {
-    console.warn(`[names] discoverNameByMetaAddress failed on ${chainName}:`, e);
-    return null;
-  }
+async function discoverNameOnChain(_chainId: number, _chainName: string, _targetHex: string): Promise<string | null> {
+  // FHE NameRegistry has no enumeration function — cannot discover names by iterating
+  return null;
 }
 
 const ERC6538_REGISTRY_ABI = [
@@ -456,48 +432,7 @@ export async function discoverNameByWalletHistory(
 
     if (historicalMetas.size === 0) return null;
 
-    // Step 2: Check deployer names on ALL chains' nameRegistries in parallel
-    const namingChains = chains.filter(c => c.contracts.nameRegistry);
-    const canonical = getCanonicalNamingChain();
-    if (!namingChains.find(c => c.id === canonical.id)) {
-      namingChains.unshift(canonical);
-    }
-    const nameResults = await Promise.allSettled(
-      namingChains.map(async (chain) => {
-        const addr = getNameRegistryForChain(chain.id);
-        if (!addr) return null;
-        try {
-          const rpcProvider = getReadOnlyProvider(chain.id);
-          const registry = new ethers.Contract(addr, NAME_REGISTRY_ABI, rpcProvider);
-          const deployerNames: string[] = await registry.getNamesOwnedBy(DEPLOYER);
-
-          let bestMatch: string | null = null;
-          for (const name of deployerNames) {
-            try {
-              const resolved: string = await registry.resolveName(name);
-              if (resolved && historicalMetas.has(resolved.toLowerCase())) {
-                if (!bestMatch || name.length < bestMatch.length) {
-                  bestMatch = name;
-                }
-              }
-            } catch { continue; }
-          }
-
-          if (bestMatch) {
-            console.log(`[names] Discovered name "${bestMatch}" via wallet history on ${chain.name} (${chain.id})`);
-            return bestMatch;
-          }
-        } catch (e) {
-          console.warn(`[names] Name registry scan failed on ${chain.name}:`, e);
-        }
-        return null;
-      })
-    );
-
-    for (const result of nameResults) {
-      if (result.status === 'fulfilled' && result.value) return result.value;
-    }
-
+    // FHE NameRegistry has no enumeration function — cannot scan deployer names
     return null;
   } catch (e) {
     console.error('[names] discoverNameByWalletHistory error:', e);

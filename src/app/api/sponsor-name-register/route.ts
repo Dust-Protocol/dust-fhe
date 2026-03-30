@@ -10,14 +10,14 @@ export const maxDuration = 60;
 const SPONSOR_KEY = process.env.RELAYER_PRIVATE_KEY;
 
 const NAME_REGISTRY_ABI = [
-  'function registerName(string calldata name, bytes calldata stealthMetaAddress) external',
+  'function registerName(string calldata name, bytes calldata spendingPubKey, bytes calldata viewingPubKey) external payable',
   'function isNameAvailable(string calldata name) external view returns (bool)',
-  'function resolveName(string calldata name) external view returns (bytes)',
+  'function resolveName(string calldata name) external view returns (bytes memory, bytes memory)',
   'function transferName(string calldata name, address newOwner) external',
 ];
 
 const NAME_REGISTRY_MERKLE_ABI = [
-  'function registerName(string calldata name, bytes calldata stealthMetaAddress) external',
+  'function registerName(string calldata name, bytes calldata spendingPubKey, bytes calldata viewingPubKey) external',
   'function isNameAvailable(string calldata name) external view returns (bool)',
 ];
 
@@ -54,8 +54,11 @@ async function registerOnChain(
     const registry = new ethers.Contract(config.contracts.nameRegistry, NAME_REGISTRY_ABI, sponsor);
     const available = await registry.isNameAvailable(stripped);
     if (!available) return null; // already registered on this chain
-    // Manual gas limit prevents UNPREDICTABLE_GAS_LIMIT when RPC estimation fails transiently
-    const tx = await registry.registerName(stripped, metaBytes, { gasLimit: 300_000 });
+    // FHE NameRegistry takes split spend/view keys, not a single blob
+    const rawMeta = metaBytes.replace(/^0x/, '');
+    const spendKey = '0x' + rawMeta.slice(0, 66);
+    const viewKey = '0x' + rawMeta.slice(66, 132);
+    const tx = await registry.registerName(stripped, spendKey, viewKey, { value: 0, gasLimit: 300_000 });
     const receipt = await tx.wait();
     if (receipt.status === 0) {
       console.error(`[SponsorNameRegister] Registration tx reverted for "${stripped}" on chain ${chainId}`);
@@ -104,7 +107,10 @@ async function registerOnCanonicalMerkle(
       return null;
     }
 
-    const tx = await merkleRegistry.registerName(stripped, metaBytes);
+    const rawMeta = metaBytes.replace(/^0x/, '');
+    const spendKey = '0x' + rawMeta.slice(0, 66);
+    const viewKey = '0x' + rawMeta.slice(66, 132);
+    const tx = await merkleRegistry.registerName(stripped, spendKey, viewKey);
     const receipt = await tx.wait();
     if (receipt.status === 0) {
       console.error(`[SponsorNameRegister] Canonical Merkle tx reverted for "${stripped}"`);
@@ -170,9 +176,12 @@ export async function POST(req: Request) {
       const available = await registry.isNameAvailable(stripped);
       if (!available) {
         try {
-          const storedMeta: string = await registry.resolveName(stripped);
+          const [storedSpend, storedView] = await registry.resolveName(stripped);
+          const storedMeta = storedSpend && storedView
+            ? '0x' + storedSpend.replace(/^0x/, '') + storedView.replace(/^0x/, '')
+            : null;
           const normalizeHex = (h: string) => h.toLowerCase().replace(/^0x/, '');
-          if (normalizeHex(storedMeta) === normalizeHex(metaBytes)) {
+          if (storedMeta && normalizeHex(storedMeta) === normalizeHex(metaBytes)) {
             console.log(`[SponsorNameRegister] Name "${stripped}" already registered to same meta-address — idempotent success`);
             return NextResponse.json({ success: true, txHash: null, name: stripped, alreadyRegistered: true }, { headers: { 'Cache-Control': 'no-store' } });
           }
