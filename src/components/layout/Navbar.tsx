@@ -157,50 +157,16 @@ export function Navbar() {
         {/* Right — chain badge + wallet button + hamburger */}
         <div className="flex-1 flex items-center justify-end gap-2 sm:gap-3 min-w-0">
 
-          {/* Chain badge */}
+          {/* Chain badge — single chain, no dropdown */}
           {isConnected && (
-            <div className="relative shrink-0" ref={chainBadgeRef}>
-              <button
-                onClick={() => setChainDropdownOpen(v => !v)}
-                className="flex items-center gap-1.5 sm:gap-2 px-2 sm:px-2.5 py-1.5 sm:py-2 rounded-sm border border-white/10 bg-[#0a0d14] hover:bg-[#0a0d14]/80 hover:border-[#00FF41]/40 transition-all duration-300 group shadow-sm"
-              >
+            <div className="relative shrink-0">
+              <div className="flex items-center gap-1.5 sm:gap-2 px-2 sm:px-2.5 py-1.5 sm:py-2 rounded-sm border border-white/10 bg-[#0a0d14]">
                 <ChainTokenIcon size={16} chainId={activeChain.id} />
-                <span className="hidden sm:inline text-[11px] font-mono text-white/70 group-hover:text-[#00FF41] transition-colors tracking-wide">
-                  {shortChainName(activeChain.name).toUpperCase()}
+                <span className="hidden sm:inline text-[11px] font-mono text-white/70 tracking-wide">
+                  ARBITRUM
                 </span>
-                <ChevronDownIcon
-                  className="w-3 h-3 text-white/30 group-hover:text-[#00FF41]/70 transition-all duration-300"
-                  style={{ transform: chainDropdownOpen ? "rotate(180deg)" : "none" }}
-                />
-              </button>
+              </div>
 
-              {chainDropdownOpen && (
-                <div className="absolute top-[calc(100%+8px)] right-0 bg-[#0a0d14] border border-[#00FF41]/20 rounded-sm min-w-[220px] z-50 overflow-hidden shadow-[0_8px_32px_-4px_rgba(0,0,0,0.8)] animate-in fade-in slide-in-from-top-1 duration-200">
-                  <div className="px-4 pt-3 pb-2 border-b border-white/[0.04]">
-                    <span className="text-[10px] font-mono text-[#00FF41]/50 tracking-[0.2em] uppercase">Network</span>
-                  </div>
-                  <div className="py-1">
-                    {chains.map(chain => {
-                      const isActive = chain.id === activeChainId;
-                      return (
-                        <button
-                          key={chain.id}
-                          onClick={() => selectChain(chain.id)}
-                          className={`w-full text-left px-4 py-2.5 text-xs font-mono transition-all flex items-center gap-3 relative group ${isActive
-                              ? 'text-[#00FF41] bg-[#00FF41]/[0.08]'
-                              : 'text-white/60 hover:bg-white/[0.04] hover:text-white'
-                            }`}
-                        >
-                          {isActive && <div className="absolute left-0 top-0 bottom-0 w-[2px] bg-[#00FF41] shadow-[0_0_8px_rgba(0,255,65,1)]" />}
-                          <ChainTokenIcon size={16} chainId={chain.id} />
-                          <span className="flex-1 tracking-wide">{chain.name}</span>
-                          {isActive && <span className="w-1.5 h-1.5 bg-[#00FF41] shadow-[0_0_6px_rgba(0,255,65,0.8)] rounded-sm"></span>}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
             </div>
           )}
 
