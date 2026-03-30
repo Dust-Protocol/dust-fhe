@@ -112,28 +112,35 @@ export function OnboardingWizard() {
           throw new Error("Failed to look up existing account");
         }
       } else {
-        // Fresh onboarding — register the chosen name on-chain.
-        // registerName returns the txHash string, or 'already-registered' for idempotent re-reg.
-        const nameTx = await registerName(username, result.metaAddress);
-        if (!nameTx) throw new Error("Failed to register name");
-
-        const metaOk = await tryRegisterMeta();
-        if (!metaOk) {
-          hasMetaWarning = true;
-          setMetaRegWarning("Account created, but stealth keys couldn't be registered on-chain. Your account may not be discoverable from other devices.");
-        }
-
-        // Extract compressed pubkeys from metaAddress (st:thanos:0x<spend66><view66>)
+        // Fresh onboarding — register name on FHE NameRegistry (primary, Arb Sepolia)
         const metaHex = result.metaAddress.match(/st:[a-z]+:0x([0-9a-fA-F]{132})/)?.[1];
-        if (metaHex) {
-          const spendingPubKey = metaHex.slice(0, 66);
-          const viewingPubKey = metaHex.slice(66, 132);
-          fetch('/api/fhe/sponsor-name-register', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ name: username, spendingPubKey, viewingPubKey }),
-          }).catch(() => console.warn('[Onboarding] FHE name registration failed (non-blocking)'));
+        if (!metaHex) throw new Error("Invalid stealth meta-address format");
+
+        const spendingPubKey = metaHex.slice(0, 66);
+        const viewingPubKey = metaHex.slice(66, 132);
+
+        const fheRes = await fetch('/api/fhe/sponsor-name-register', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: username, spendingPubKey, viewingPubKey }),
+        });
+        if (!fheRes.ok) {
+          const err = await fheRes.json().catch(() => ({ error: 'Registration failed' }));
+          if (!err.alreadyRegistered) throw new Error(err.error || "Failed to register name");
         }
+
+        // Register ERC-6538 meta-address (non-blocking — for stealth discoverability)
+        tryRegisterMeta().then(ok => {
+          if (!ok) {
+            hasMetaWarning = true;
+            setMetaRegWarning("Account created, but stealth keys couldn't be registered on-chain.");
+          }
+        });
+
+        // Also register on old NameRegistry if available (non-blocking)
+        registerName(username, result.metaAddress).catch(() =>
+          console.warn('[Onboarding] Legacy name registration failed (non-blocking)')
+        );
       }
 
       if (address) {

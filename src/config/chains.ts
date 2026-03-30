@@ -223,7 +223,7 @@ const ARBITRUM_SEPOLIA_CONFIG: ChainConfig = {
   contracts: {
     announcer: '0x66254f9EdBaAe71B1d81A7cb7b40748A67D6AE42',
     registry: '0xbF9cB629aEB33d7D3934c93aB2b467c366895Cf2',
-    nameRegistry: '',
+    nameRegistry: '0x31DdFEB4Fc83a248E8CD48991c4C8E68EB96B537',
     walletFactory: '0xba3772E8a0D78f1909339aCfeb5420bD0C7c5D95',
     legacyWalletFactory: '',
     accountFactory: '0x85C0b4B3f8d594E3d72B781A915852409E3327fd',
